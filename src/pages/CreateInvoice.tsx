@@ -244,7 +244,7 @@ export default function CreateInvoice() {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col min-h-full">
       {/* Top Bar */}
       <div className="border-b bg-white px-4 sm:px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
         <div className="flex items-center gap-4">
@@ -278,9 +278,9 @@ export default function CreateInvoice() {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden p-4 sm:p-6 gap-6">
+      <div className="flex flex-col lg:flex-row flex-1 p-4 sm:p-6 gap-6 lg:overflow-hidden">
         {/* Left Form */}
-        <div className="w-full lg:w-[380px] flex flex-col gap-4 overflow-y-auto lg:pr-2 hide-scrollbar shrink-0">  
+        <div className="w-full lg:w-[380px] flex flex-col gap-4 lg:overflow-y-auto lg:pr-2 hide-scrollbar shrink-0">  
           <div className="space-y-6 max-w-2xl mx-auto w-full">
             {/* Invoice Details Card */}
             <Card className="rounded-xl shadow-sm border-slate-200 overflow-hidden">
@@ -288,15 +288,15 @@ export default function CreateInvoice() {
                 Invoice Details
               </div>
               <CardContent className="p-4 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5 col-span-2 sm:col-span-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
                     <Label>Invoice Number</Label>
-                    <div className="flex">
-                      <div className="bg-slate-100 border border-r-0 border-input rounded-l-md px-3 py-2 text-sm text-slate-500 whitespace-nowrap flex items-center">
+                    <div className="flex w-full">
+                      <div className="bg-slate-100 border border-r-0 border-input rounded-l-md px-3 py-2 text-sm text-slate-500 whitespace-nowrap flex items-center shrink-0">
                         {invoicePrefix}
                       </div>
                       <Input 
-                        className={`rounded-l-none pl-2 ${isDuplicate ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                        className={`rounded-l-none pl-2 flex-1 w-auto min-w-0 ${isDuplicate ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                         value={invoiceSuffix}
                         onChange={e => setInvoiceSuffix(e.target.value)}
                         placeholder="001"
@@ -329,7 +329,7 @@ export default function CreateInvoice() {
                       onChange={e => setFormData({...formData, due_date: e.target.value})}
                     />
                   </div>
-                  <div className="flex items-center space-x-2 pt-6">
+                  <div className="flex items-center space-x-2 pt-2 sm:pt-6 sm:col-span-2">
                     <input 
                       type="checkbox" 
                       id="gst"
@@ -411,7 +411,7 @@ export default function CreateInvoice() {
                           className="min-h-[60px]"
                         />
                       </div>
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="space-y-1.5">
                           <Label>Qty / Pax</Label>
                           <Input 
@@ -462,7 +462,7 @@ export default function CreateInvoice() {
         </div>
 
         {/* Right Live Preview */}
-        <div className="flex-1 bg-slate-200 rounded-xl overflow-y-auto overflow-x-auto p-4 sm:p-8 flex justify-center lg:justify-center items-start w-full lg:w-auto mt-6 lg:mt-0">
+        <div className="flex-1 bg-slate-200 rounded-xl overflow-y-auto overflow-x-auto p-4 sm:p-8 flex justify-center lg:justify-center items-start w-full lg:w-auto mt-6 lg:mt-0 lg:min-h-0 min-h-[400px]">
            <div className="shadow-2xl rounded-sm overflow-hidden bg-white shrink-0 origin-top-left transform scale-[0.6] sm:scale-75 lg:scale-100 xl:scale-100 transition-transform">
              {/* Note passing previewRef to capture for PDF */}
              <InvoicePreview data={invoiceData} previewRef={previewRef} />
