@@ -14,10 +14,15 @@ export default function Dashboard() {
   const fetchInvoices = async () => {
     try {
       const res = await fetch("/api/invoices");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `Server responded with ${res.status}`);
+      }
       const data = await res.json();
-      setInvoices(data);
-    } catch (e) {
-      console.error(e);
+      setInvoices(Array.isArray(data) ? data : []);
+    } catch (e: any) {
+      console.error("Failed to fetch invoices:", e);
+      // Optional: set an error state to show to the user
     } finally {
       setLoading(false);
     }

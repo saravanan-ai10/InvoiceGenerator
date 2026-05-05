@@ -10,29 +10,34 @@ export default function ViewInvoice() {
   const previewRef = useRef<HTMLDivElement>(null);
   const [invoice, setInvoice] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchInvoice = async () => {
       try {
+        setError(null);
         const res = await fetch(`/api/invoices/${id}`);
-        if (res.ok) {
-          const data = await res.json();
-          // transform to match InvoiceData format expected by InvoicePreview
-          setInvoice({
-            ...data,
-            customer_name: data.name,
-            customer_address: data.address,
-            contact_person: data.contact_person,
-            total_amount: Number(data.total_amount),
-            subtotal: data.subtotal != null ? Number(data.subtotal) : Number(data.total_amount), 
-            gst_enabled: data.gst_enabled || false, 
-            gst_amount: data.gst_amount != null ? Number(data.gst_amount) : 0,
-            notes: data.notes || '',
-            due_date: data.due_date || new Date(new Date(data.date).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString()
-          });
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({ error: 'Invoice not found' }));
+          throw new Error(errorData.error || `Server error: ${res.status}`);
         }
-      } catch (e) {
+        const data = await res.json();
+        // transform to match InvoiceData format expected by InvoicePreview
+        setInvoice({
+          ...data,
+          customer_name: data.name,
+          customer_address: data.address,
+          contact_person: data.contact_person,
+          total_amount: Number(data.total_amount),
+          subtotal: data.subtotal != null ? Number(data.subtotal) : Number(data.total_amount), 
+          gst_enabled: data.gst_enabled || false, 
+          gst_amount: data.gst_amount != null ? Number(data.gst_amount) : 0,
+          notes: data.notes || '',
+          due_date: data.due_date || new Date(new Date(data.date).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString()
+        });
+      } catch (e: any) {
         console.error(e);
+        setError(e.message);
       } finally {
         setLoading(false);
       }
@@ -91,7 +96,19 @@ export default function ViewInvoice() {
   }
 
   if (!invoice) {
-    return <div className="flex-1 p-8 text-center text-slate-500">Invoice not found.</div>;
+    return (
+      <div className="flex-1 p-8 text-center text-slate-500">
+        {error ? (
+          <div className="max-w-md mx-auto bg-red-50 border border-red-100 p-6 rounded-lg">
+            <p className="text-red-700 font-medium mb-2">Error loading invoice</p>
+            <p className="text-red-500 text-sm mb-4">{error}</p>
+            <Link to="/" className="text-blue-600 hover:underline text-sm font-medium">Back to Dashboard</Link>
+          </div>
+        ) : (
+          "Invoice not found."
+        )}
+      </div>
+    );
   }
 
   return (

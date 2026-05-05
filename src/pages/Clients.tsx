@@ -12,10 +12,14 @@ export default function Clients() {
   const fetchClients = async () => {
     try {
       const res = await fetch("/api/customers");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `Server responded with ${res.status}`);
+      }
       const data = await res.json();
-      setClients(data);
-    } catch (e) {
-      console.error(e);
+      setClients(Array.isArray(data) ? data : []);
+    } catch (e: any) {
+      console.error("Failed to fetch clients:", e);
     } finally {
       setLoading(false);
     }

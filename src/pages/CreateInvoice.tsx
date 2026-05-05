@@ -60,11 +60,14 @@ export default function CreateInvoice() {
       total: Number(s.total)
     })) : [
       { description: "", quantity: 1, unit_price: 0, total: 0 }
-    ]
+    ],
+    status: editInvoice?.status || 'pending'
   });
 
   const [gstPercentage, setGstPercentage] = useState(9.0);
   const [lastInvoiceNumber, setLastInvoiceNumber] = useState<string | null>(null);
+  const [allInvoices, setAllInvoices] = useState<any[]>([]);
+  const [isDuplicate, setIsDuplicate] = useState(false);
 
   useEffect(() => {
     fetch('/api/profile')
@@ -77,19 +80,32 @@ export default function CreateInvoice() {
       .catch(console.error);
 
     fetch('/api/invoices')
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) return [];
+        return res.json().catch(() => []);
+      })
       .then(data => {
-        if (data && data.length > 0) {
-          data.sort((a: any, b: any) => b.id - a.id);
-          setLastInvoiceNumber(data[0].invoice_number);
+        if (data && Array.isArray(data)) {
+          setAllInvoices(data);
+          if (data.length > 0) {
+            const sorted = [...data].sort((a: any, b: any) => b.id - a.id);
+            setLastInvoiceNumber(sorted[0].invoice_number);
+          }
         }
       })
       .catch(console.error);
   }, []);
 
   useEffect(() => {
-    setFormData(prev => ({ ...prev, invoice_number: `${invoicePrefix}${invoiceSuffix}` }));
-  }, [invoicePrefix, invoiceSuffix]);
+    const newNumber = `${invoicePrefix}${invoiceSuffix}`;
+    setFormData(prev => ({ ...prev, invoice_number: newNumber }));
+    
+    // Check for duplicate
+    const duplicate = allInvoices.find(inv => 
+      inv.invoice_number === newNumber && inv.id !== formData.id
+    );
+    setIsDuplicate(!!duplicate);
+  }, [invoicePrefix, invoiceSuffix, allInvoices, formData.id]);
 
   // Derived state
   const subtotal = formData.services.reduce((acc, curr) => acc + (curr.total || 0), 0);
@@ -178,11 +194,15 @@ export default function CreateInvoice() {
   };
 
   const handleSaveInvoice = async () => {
+    if (isDuplicate) {
+      alert(`Error: Invoice number "${formData.invoice_number}" already exists. Please use a unique number before saving.`);
+      return;
+    }
     setSaving(true);
     try {
       let custId = formData.customer_id;
       
-      // 1. Create customer or get customer ID
+      // 1. Create or Update customer
       if (!custId) {
         const custRes = await fetch('/api/customers', {
           method: 'POST',
@@ -195,6 +215,17 @@ export default function CreateInvoice() {
         });
         const custData = await custRes.json();
         custId = custData.id;
+      } else {
+        // Update existing customer details
+        await fetch(`/api/customers/${custId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: formData.customer_name,
+            address: formData.customer_address,
+            contact_person: formData.contact_person
+          })
+        });
       }
       
       // 2. Create or Update invoice
@@ -220,6 +251,13 @@ export default function CreateInvoice() {
       
       if (invRes.ok) {
         navigate(formData.id ? `/invoices/${formData.id}` : '/');
+      } else {
+        const errorData = await invRes.json().catch(() => ({}));
+        if (invRes.status === 409) {
+          alert(`Warning: Invoice number "${formData.invoice_number}" already exists. Please use a unique number.`);
+        } else {
+          alert('Error saving invoice: ' + (errorData.error || 'Unknown error'));
+        }
       }
     } catch (e) {
       console.error(e);
@@ -237,8 +275,10 @@ export default function CreateInvoice() {
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">New Invoice</h2>
-            <Badge variant="secondary" className="bg-blue-100 text-blue-700">Draft</Badge>
+            <h2 className="text-lg font-semibold">{formData.id ? 'Edit Invoice' : 'New Invoice'}</h2>
+            <Badge variant="secondary" className={formData.status === 'paid' ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}>
+              {formData.status ? formData.status.toUpperCase() : 'DRAFT'}
+            </Badge>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
@@ -250,7 +290,11 @@ export default function CreateInvoice() {
             <Mail className="w-4 h-4" />
             Email
           </Button>
-          <Button className="flex-1 sm:flex-none gap-2 bg-blue-600 text-white hover:bg-blue-700 shadow-sm" onClick={handleSaveInvoice} disabled={saving}>
+          <Button 
+            className="flex-1 sm:flex-none gap-2 bg-blue-600 text-white hover:bg-blue-700 shadow-sm" 
+            onClick={handleSaveInvoice} 
+            disabled={saving || isDuplicate}
+          >
             <Save className="w-4 h-4" />
             {saving ? 'Saving...' : 'Save'}
           </Button>
@@ -275,13 +319,18 @@ export default function CreateInvoice() {
                         {invoicePrefix}
                       </div>
                       <Input 
-                        className="rounded-l-none pl-2"
+                        className={`rounded-l-none pl-2 ${isDuplicate ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                         value={invoiceSuffix}
                         onChange={e => setInvoiceSuffix(e.target.value)}
                         placeholder="001"
                       />
                     </div>
-                    {lastInvoiceNumber && (
+                    {isDuplicate && (
+                      <p className="text-xs text-red-600 font-medium mt-1">
+                        This invoice number is already in use.
+                      </p>
+                    )}
+                    {!isDuplicate && lastInvoiceNumber && (
                       <p className="text-xs text-muted-foreground mt-1">
                         Last Invoice: <span className="font-medium text-slate-700">{lastInvoiceNumber}</span>
                       </p>

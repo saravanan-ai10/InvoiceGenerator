@@ -26,61 +26,73 @@ let pool: pg.Pool | null = null;
 if (process.env.DATABASE_URL) {
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false } // often needed for Render
+    ssl: { rejectUnauthorized: false }
+  });
+  
+  pool.on('error', (err) => {
+    console.error('Unexpected error on idle client', err);
   });
   
   // Try to create tables
-  pool.query(`
-    CREATE TABLE IF NOT EXISTS customers (
-      id SERIAL PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      address TEXT,
-      contact_person VARCHAR(255)
-    );
-    CREATE TABLE IF NOT EXISTS invoices (
-      id SERIAL PRIMARY KEY,
-      customer_id INTEGER REFERENCES customers(id),
-      invoice_number VARCHAR(50) UNIQUE NOT NULL,
-      date DATE NOT NULL,
-      total_amount NUMERIC(10, 2) NOT NULL,
-      status VARCHAR(20) DEFAULT 'pending',
-      due_date DATE,
-      notes TEXT,
-      gst_enabled BOOLEAN DEFAULT false,
-      gst_amount NUMERIC(10, 2) DEFAULT 0,
-      subtotal NUMERIC(10, 2) DEFAULT 0
-    );
-    -- Add column for existing tables in case it already exists without it
-    ALTER TABLE invoices ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending';
-    ALTER TABLE invoices ADD COLUMN IF NOT EXISTS due_date DATE;
-    ALTER TABLE invoices ADD COLUMN IF NOT EXISTS notes TEXT;
-    ALTER TABLE invoices ADD COLUMN IF NOT EXISTS gst_enabled BOOLEAN DEFAULT false;
-    ALTER TABLE invoices ADD COLUMN IF NOT EXISTS gst_amount NUMERIC(10, 2) DEFAULT 0;
-    ALTER TABLE invoices ADD COLUMN IF NOT EXISTS subtotal NUMERIC(10, 2) DEFAULT 0;
-    CREATE TABLE IF NOT EXISTS services (
-      id SERIAL PRIMARY KEY,
-      invoice_id INTEGER REFERENCES invoices(id),
-      description TEXT NOT NULL,
-      quantity INTEGER NOT NULL,
-      unit_price NUMERIC(10, 2) NOT NULL,
-      total NUMERIC(10, 2) NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS profile (
-      id SERIAL PRIMARY KEY,
-      company_name VARCHAR(255),
-      address TEXT,
-      phone VARCHAR(255),
-      email VARCHAR(255),
-      bank_name VARCHAR(255),
-      bank_account_name VARCHAR(255),
-      bank_account_no VARCHAR(255),
-      gst_percentage NUMERIC(5, 2) DEFAULT 9.0
-    );
-    ALTER TABLE profile ADD COLUMN IF NOT EXISTS gst_percentage NUMERIC(5, 2) DEFAULT 9.0;
-    INSERT INTO profile (id, company_name, address, phone, email, bank_name, bank_account_name, bank_account_no) 
-    SELECT 1, 'Sparksfly O&G Pte Ltd', '123 Industrial Park Rd, #04-56\nSingapore 678901', '+65 6123 4567', 'contact@sparksfly.sg', 'OCBC Bank Singapore', 'Sparksfly O&G Pte Ltd', '123-456789-001'
-    WHERE NOT EXISTS (SELECT 1 FROM profile WHERE id = 1);
-  `).catch(console.error);
+  const initDb = async () => {
+    if (!pool) return;
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS customers (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          address TEXT,
+          contact_person VARCHAR(255)
+        );
+        CREATE TABLE IF NOT EXISTS invoices (
+          id SERIAL PRIMARY KEY,
+          customer_id INTEGER REFERENCES customers(id),
+          invoice_number VARCHAR(50) UNIQUE NOT NULL,
+          date DATE NOT NULL,
+          total_amount NUMERIC(10, 2) NOT NULL,
+          status VARCHAR(20) DEFAULT 'pending',
+          due_date DATE,
+          notes TEXT,
+          gst_enabled BOOLEAN DEFAULT false,
+          gst_amount NUMERIC(10, 2) DEFAULT 0,
+          subtotal NUMERIC(10, 2) DEFAULT 0
+        );
+        ALTER TABLE invoices ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending';
+        ALTER TABLE invoices ADD COLUMN IF NOT EXISTS due_date DATE;
+        ALTER TABLE invoices ADD COLUMN IF NOT EXISTS notes TEXT;
+        ALTER TABLE invoices ADD COLUMN IF NOT EXISTS gst_enabled BOOLEAN DEFAULT false;
+        ALTER TABLE invoices ADD COLUMN IF NOT EXISTS gst_amount NUMERIC(10, 2) DEFAULT 0;
+        ALTER TABLE invoices ADD COLUMN IF NOT EXISTS subtotal NUMERIC(10, 2) DEFAULT 0;
+        CREATE TABLE IF NOT EXISTS services (
+          id SERIAL PRIMARY KEY,
+          invoice_id INTEGER REFERENCES invoices(id),
+          description TEXT NOT NULL,
+          quantity INTEGER NOT NULL,
+          unit_price NUMERIC(10, 2) NOT NULL,
+          total NUMERIC(10, 2) NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS profile (
+          id SERIAL PRIMARY KEY,
+          company_name VARCHAR(255),
+          address TEXT,
+          phone VARCHAR(255),
+          email VARCHAR(255),
+          bank_name VARCHAR(255),
+          bank_account_name VARCHAR(255),
+          bank_account_no VARCHAR(255),
+          gst_percentage NUMERIC(5, 2) DEFAULT 9.0
+        );
+        ALTER TABLE profile ADD COLUMN IF NOT EXISTS gst_percentage NUMERIC(5, 2) DEFAULT 9.0;
+        INSERT INTO profile (id, company_name, address, phone, email, bank_name, bank_account_name, bank_account_no) 
+        SELECT 1, 'Sparksfly O&G Pte Ltd', '123 Industrial Park Rd, #04-56\nSingapore 678901', '+65 6123 4567', 'contact@sparksfly.sg', 'OCBC Bank Singapore', 'Sparksfly O&G Pte Ltd', '123-456789-001'
+        WHERE NOT EXISTS (SELECT 1 FROM profile WHERE id = 1);
+      `);
+      console.log('Database initialized successfully');
+    } catch (err) {
+      console.error('Failed to initialize database:', err);
+    }
+  };
+  initDb();
 }
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -96,8 +108,13 @@ async function startServer() {
   // Get Profile
   app.get('/api/profile', async (req, res) => {
     if (pool) {
-      const result = await pool.query('SELECT * FROM profile WHERE id = 1');
-      res.json(result.rows[0] || memProfile);
+      try {
+        const result = await pool.query('SELECT * FROM profile WHERE id = 1');
+        res.json(result.rows[0] || memProfile);
+      } catch (err: any) {
+        console.error('Error fetching profile:', err);
+        res.status(500).json({ error: 'Database error', detail: err.message });
+      }
     } else {
       res.json(memProfile);
     }
@@ -141,8 +158,12 @@ async function startServer() {
 
   app.get('/api/customers', async (req, res) => {
     if (pool) {
-      const result = await pool.query('SELECT * FROM customers ORDER BY name');
-      res.json(result.rows);
+      try {
+        const result = await pool.query('SELECT * FROM customers ORDER BY name');
+        res.json(result.rows);
+      } catch (err: any) {
+        res.status(500).json({ error: 'Database error', detail: err.message });
+      }
     } else {
       res.json(memCustomers);
     }
@@ -151,11 +172,15 @@ async function startServer() {
   app.post('/api/customers', async (req, res) => {
     const { name, address, contact_person } = req.body;
     if (pool) {
-      const result = await pool.query(
-        'INSERT INTO customers (name, address, contact_person) VALUES ($1, $2, $3) RETURNING *',
-        [name, address, contact_person]
-      );
-      res.json(result.rows[0]);
+      try {
+        const result = await pool.query(
+          'INSERT INTO customers (name, address, contact_person) VALUES ($1, $2, $3) RETURNING *',
+          [name, address, contact_person]
+        );
+        res.json(result.rows[0]);
+      } catch (err: any) {
+        res.status(500).json({ error: 'Database error', detail: err.message });
+      }
     } else {
       const newCust = { id: memIdCounter++, name, address, contact_person };
       memCustomers.push(newCust);
@@ -163,12 +188,38 @@ async function startServer() {
     }
   });
 
+  app.put('/api/customers/:id', async (req, res) => {
+    const id = parseInt(req.params.id);
+    const { name, address, contact_person } = req.body;
+    if (pool) {
+      try {
+        const result = await pool.query(
+          'UPDATE customers SET name=$1, address=$2, contact_person=$3 WHERE id=$4 RETURNING *',
+          [name, address, contact_person, id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+        res.json(result.rows[0]);
+      } catch (err: any) {
+        res.status(500).json({ error: 'Database error', detail: err.message });
+      }
+    } else {
+      const idx = memCustomers.findIndex(c => c.id === id);
+      if (idx === -1) return res.status(404).json({ error: 'Not found' });
+      memCustomers[idx] = { ...memCustomers[idx], name, address, contact_person };
+      res.json(memCustomers[idx]);
+    }
+  });
+
   app.get('/api/customers/:id', async (req, res) => {
     const id = parseInt(req.params.id);
     if (pool) {
-      const result = await pool.query('SELECT * FROM customers WHERE id = $1', [id]);
-      if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-      res.json(result.rows[0]);
+      try {
+        const result = await pool.query('SELECT * FROM customers WHERE id = $1', [id]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+        res.json(result.rows[0]);
+      } catch (err: any) {
+        res.status(500).json({ error: 'Database error', detail: err.message });
+      }
     } else {
       const cust = memCustomers.find(c => c.id === id);
       if (!cust) return res.status(404).json({ error: 'Not found' });
@@ -179,14 +230,18 @@ async function startServer() {
   app.get('/api/customers/:id/invoices', async (req, res) => {
     const customerId = parseInt(req.params.id);
     if (pool) {
-      const result = await pool.query(`
-        SELECT i.*, c.name as customer_name 
-        FROM invoices i 
-        JOIN customers c ON i.customer_id = c.id 
-        WHERE i.customer_id = $1
-        ORDER BY i.id DESC
-      `, [customerId]);
-      res.json(result.rows);
+      try {
+        const result = await pool.query(`
+          SELECT i.*, c.name as customer_name 
+          FROM invoices i 
+          JOIN customers c ON i.customer_id = c.id 
+          WHERE i.customer_id = $1
+          ORDER BY i.id DESC
+        `, [customerId]);
+        res.json(result.rows);
+      } catch (err: any) {
+        res.status(500).json({ error: 'Database error', detail: err.message });
+      }
     } else {
       const enriched = memInvoices
         .filter(i => i.customer_id === customerId)
@@ -225,13 +280,17 @@ async function startServer() {
   // Get all invoices
   app.get('/api/invoices', async (req, res) => {
     if (pool) {
-      const result = await pool.query(`
-        SELECT i.*, c.name as customer_name 
-        FROM invoices i 
-        JOIN customers c ON i.customer_id = c.id 
-        ORDER BY i.id DESC
-      `);
-      res.json(result.rows);
+      try {
+        const result = await pool.query(`
+          SELECT i.*, c.name as customer_name 
+          FROM invoices i 
+          JOIN customers c ON i.customer_id = c.id 
+          ORDER BY i.id DESC
+        `);
+        res.json(result.rows);
+      } catch (err: any) {
+        res.status(500).json({ error: 'Database error', detail: err.message });
+      }
     } else {
       const enriched = memInvoices.map(i => ({
         ...i,
@@ -245,19 +304,23 @@ async function startServer() {
   app.get('/api/invoices/:id', async (req, res) => {
     const id = parseInt(req.params.id);
     if (pool) {
-      const invRes = await pool.query(`
-        SELECT i.*, c.name, c.address, c.contact_person 
-        FROM invoices i 
-        JOIN customers c ON i.customer_id = c.id 
-        WHERE i.id = $1
-      `, [id]);
-      if (invRes.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-      
-      const servRes = await pool.query('SELECT * FROM services WHERE invoice_id = $1 ORDER BY id', [id]);
-      res.json({
-        ...invRes.rows[0],
-        services: servRes.rows
-      });
+      try {
+        const invRes = await pool.query(`
+          SELECT i.*, c.name, c.address, c.contact_person 
+          FROM invoices i 
+          JOIN customers c ON i.customer_id = c.id 
+          WHERE i.id = $1
+        `, [id]);
+        if (invRes.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+        
+        const servRes = await pool.query('SELECT * FROM services WHERE invoice_id = $1 ORDER BY id', [id]);
+        res.json({
+          ...invRes.rows[0],
+          services: servRes.rows
+        });
+      } catch (err: any) {
+        res.status(500).json({ error: 'Database error', detail: err.message });
+      }
     } else {
       const inv = memInvoices.find(i => i.id === id);
       if (!inv) return res.status(404).json({ error: 'Not found' });
@@ -317,11 +380,19 @@ async function startServer() {
         res.json({ success: true, id });
       } catch (e: any) {
         await client.query('ROLLBACK');
-        res.status(500).json({ error: e.message });
+        if (e.code === '23505') {
+          res.status(409).json({ error: 'Invoice number already exists' });
+        } else {
+          res.status(500).json({ error: e.message });
+        }
       } finally {
         client.release();
       }
     } else {
+      const exists = memInvoices.some(inv => inv.invoice_number === invoice_number && inv.id !== id);
+      if (exists) {
+        return res.status(409).json({ error: 'Invoice number already exists' });
+      }
       const idx = memInvoices.findIndex(i => i.id === id);
       if (idx !== -1) {
         memInvoices[idx] = { ...memInvoices[idx], customer_id, invoice_number, date, due_date, notes, gst_enabled, gst_amount, subtotal, total_amount };
@@ -384,11 +455,20 @@ async function startServer() {
         res.json({ id: invoiceId });
       } catch (e: any) {
         await client.query('ROLLBACK');
-        res.status(500).json({ error: e.message });
+        if (e.code === '23505') {
+          res.status(409).json({ error: 'Invoice number already exists' });
+        } else {
+          res.status(500).json({ error: e.message });
+        }
       } finally {
         client.release();
       }
     } else {
+      // Check local duplicate for in-memory store
+      const exists = memInvoices.some(inv => inv.invoice_number === invoice_number);
+      if (exists) {
+        return res.status(409).json({ error: 'Invoice number already exists' });
+      }
       const invoiceId = memIdCounter++;
       memInvoices.push({
         id: invoiceId,
