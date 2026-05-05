@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { ArrowLeft, Download, Mail, Plus, Trash2, Save } from "lucide-react";
+import { ArrowLeft, Download, Mail, Plus, Trash2, Save, Share2 } from "lucide-react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import InvoicePreview from "../components/InvoicePreview";
 import { Card, CardContent } from "../components/ui/card";
@@ -8,7 +8,7 @@ import { Label } from "../components/ui/label";
 import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
 import { Badge } from "../components/ui/badge";
-import html2canvas from 'html2canvas';
+import { toCanvas } from 'html-to-image';
 import jsPDF from 'jspdf';
 
 export default function CreateInvoice() {
@@ -20,6 +20,7 @@ export default function CreateInvoice() {
   
   const [saving, setSaving] = useState(false);
   const [loadingPdf, setLoadingPdf] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
 
   const getPrefix = (invoiceNumber?: string) => {
     if (invoiceNumber) {
@@ -148,10 +149,8 @@ export default function CreateInvoice() {
     if (!previewRef.current) return;
     setLoadingPdf(true);
     try {
-      const canvas = await html2canvas(previewRef.current, {
-        scale: 2, // Better quality
-        useCORS: true,
-        logging: false
+      const canvas = await toCanvas(previewRef.current, {
+        pixelRatio: 2
       });
       
       const imgData = canvas.toDataURL('image/png');
@@ -167,6 +166,47 @@ export default function CreateInvoice() {
       console.error(e);
     } finally {
       setLoadingPdf(false);
+    }
+  };
+
+  const handleShare = async () => {
+    if (isSharing) return;
+    setIsSharing(true);
+    try {
+      let isPdfShared = false;
+      if (navigator.share && previewRef.current && navigator.canShare) {
+        setLoadingPdf(true); // Indicate loading using the same state
+        const canvas = await toCanvas(previewRef.current, { pixelRatio: 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'px',
+          format: [canvas.width, canvas.height] 
+        });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        
+        const pdfBlob = pdf.output('blob');
+        const file = new File([pdfBlob], `${formData.invoice_number}.pdf`, { type: 'application/pdf' });
+        
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: `Invoice ${formData.invoice_number}`,
+            text: `Please find your invoice ${formData.invoice_number} here.`,
+            files: [file],
+          });
+          isPdfShared = true;
+        }
+        setLoadingPdf(false);
+      }
+
+      if (!isPdfShared) {
+         alert('File sharing is not supported on this browser/device.');
+      }
+    } catch (err) {
+      console.error('Error sharing', err);
+    } finally {
+      setLoadingPdf(false);
+      setIsSharing(false);
     }
   };
 
@@ -259,7 +299,11 @@ export default function CreateInvoice() {
           </div>
         </div>
         <div className="flex flex-row flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-          <Button variant="outline" className="flex-1 sm:flex-none gap-1 sm:gap-2 text-blue-600 border-blue-600 hover:bg-blue-50 hover:text-blue-700 px-2 sm:px-4 min-w-[80px]" onClick={handleDownloadPDF} disabled={loadingPdf}>
+          <Button variant="outline" className="flex-1 sm:flex-none gap-1 sm:gap-2 text-slate-600 hover:bg-slate-50 px-2 sm:px-4 min-w-[80px]" onClick={handleShare} disabled={isSharing || loadingPdf}>
+            <Share2 className="w-4 h-4 shrink-0" />
+            <span className="text-sm font-medium truncate">{isSharing ? 'Sharing...' : 'Share'}</span>
+          </Button>
+          <Button variant="outline" className="flex-1 sm:flex-none gap-1 sm:gap-2 text-blue-600 border-blue-600 hover:bg-blue-50 hover:text-blue-700 px-2 sm:px-4 min-w-[80px]" onClick={handleDownloadPDF} disabled={loadingPdf || isSharing}>
             <Download className="w-4 h-4 shrink-0" />
             <span className="text-sm font-medium truncate">{loadingPdf ? 'PDF...' : 'PDF'}</span>
           </Button>

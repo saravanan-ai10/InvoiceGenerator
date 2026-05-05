@@ -3,6 +3,8 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, FileText, Download, Mail, Edit, Share2, Trash2 } from "lucide-react";
 import InvoicePreview from "../components/InvoicePreview";
 import { Button } from "../components/ui/button";
+import { toCanvas } from 'html-to-image';
+import jsPDF from 'jspdf';
 
 export default function ViewInvoice() {
   const { id } = useParams();
@@ -10,6 +12,8 @@ export default function ViewInvoice() {
   const previewRef = useRef<HTMLDivElement>(null);
   const [invoice, setInvoice] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingPdf, setLoadingPdf] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,17 +50,89 @@ export default function ViewInvoice() {
   }, [id]);
 
   const handleDownloadPDF = async () => {
-    // Basic stub, real implementation would convert HTML to PDF
-    alert('PDF download triggered (stub)');
+    if (!previewRef.current) return;
+    setLoadingPdf(true);
+    try {
+      const canvas = await toCanvas(previewRef.current, {
+        pixelRatio: 2
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height] 
+      });
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+      pdf.save(`Invoice_${invoice.invoice_number}.pdf`);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setLoadingPdf(false);
+    }
   };
 
   const handleEmail = () => {
     window.location.href = `mailto:?subject=Invoice ${invoice?.invoice_number}&body=Please find attached invoice ${invoice?.invoice_number}.`;
   };
 
-  const handleShare = () => {
-    navigator.clipboard.writeText(window.location.href);
-    alert('Link copied to clipboard!');
+  const handleShare = async () => {
+    if (isSharing) return;
+    setIsSharing(true);
+    try {
+      let isPdfShared = false;
+
+      // Check if we can share files
+      if (navigator.share && previewRef.current && navigator.canShare) {
+        setLoadingPdf(true); // Re-using loading state
+        const canvas = await toCanvas(previewRef.current, { pixelRatio: 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'px',
+          format: [canvas.width, canvas.height] 
+        });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        
+        // Generate Blob from PDF
+        const pdfBlob = pdf.output('blob');
+        const file = new File([pdfBlob], `Invoice_${invoice?.invoice_number}.pdf`, { type: 'application/pdf' });
+        
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: `Invoice ${invoice?.invoice_number}`,
+            text: `Please find your invoice ${invoice?.invoice_number} here.`,
+            files: [file],
+          });
+          isPdfShared = true;
+        }
+        setLoadingPdf(false);
+      }
+
+      // Fallback to sharing URL if files couldn't be shared
+      if (!isPdfShared) {
+        const shareData = {
+          title: `Invoice ${invoice?.invoice_number}`,
+          text: `Please find your invoice ${invoice?.invoice_number} here.`,
+          url: window.location.href,
+        };
+
+        if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+          await navigator.share(shareData);
+        } else {
+          navigator.clipboard.writeText(window.location.href);
+          alert('Link copied to clipboard!');
+        }
+      }
+    } catch (err) {
+      console.error('Error sharing', err);
+      // It might be a user cancellation, we don't necessarily need to alert
+    } finally {
+      setLoadingPdf(false);
+      setIsSharing(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -139,17 +215,17 @@ export default function ViewInvoice() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2 sm:gap-3 w-full lg:w-auto">
-          <Button variant="outline" className="flex-1 sm:flex-none gap-2 text-slate-600 hover:bg-slate-50" onClick={handleShare}>
+          <Button variant="outline" className="flex-1 sm:flex-none gap-2 text-slate-600 hover:bg-slate-50" onClick={handleShare} disabled={isSharing || loadingPdf}>
             <Share2 className="w-4 h-4" />
-            <span className="hidden sm:inline">Share</span>
+            <span className="hidden sm:inline">{isSharing ? 'Sharing...' : 'Share'}</span>
           </Button>
           <Button variant="outline" className="flex-1 sm:flex-none gap-2 text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700" onClick={handleEmail}>
             <Mail className="w-4 h-4" />
             <span className="hidden sm:inline">Email</span>
           </Button>
-          <Button variant="outline" className="flex-1 sm:flex-none gap-2 text-blue-600 border-blue-600 hover:bg-blue-50 hover:text-blue-700" onClick={handleDownloadPDF}>
+          <Button variant="outline" className="flex-1 sm:flex-none gap-2 text-blue-600 border-blue-600 hover:bg-blue-50 hover:text-blue-700" onClick={handleDownloadPDF} disabled={loadingPdf || isSharing}>
             <Download className="w-4 h-4" />
-            <span className="hidden sm:inline">PDF</span>
+            <span className="hidden sm:inline">{loadingPdf ? 'PDF...' : 'PDF'}</span>
           </Button>
           {/* We'll pass the invoice state so CreateInvoice can read it */}
           <Link to="/create" state={{ editInvoice: invoice }} className="flex-1 sm:flex-none">
