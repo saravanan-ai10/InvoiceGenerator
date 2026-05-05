@@ -2,7 +2,6 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import pg from 'pg';
 import path from 'path';
-import { GoogleGenAI } from '@google/genai';
 
 const { Pool } = pg;
 
@@ -95,8 +94,6 @@ if (process.env.DATABASE_URL) {
   initDb();
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -136,23 +133,6 @@ async function startServer() {
     } else {
       memProfile = { ...memProfile, company_name, address, phone, email, bank_name, bank_account_name, bank_account_no, gst_percentage };
       res.json(memProfile);
-    }
-  });
-
-  // AI Generate Description
-  app.post('/api/generate-description', async (req, res) => {
-    try {
-      const { prompt } = req.body;
-      if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
-      
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: `You are an AI assistant for a cleaning service company "Sparksfly O&G Pte Ltd". Generate a professional service description based on the prompt. Keep it concise, 1 sentence, no quotes, suitable for an invoice line item. Prompt: ${prompt}`,
-      });
-      res.json({ description: response.text });
-    } catch (error: any) {
-      console.error(error);
-      res.status(500).json({ error: error.message || 'Failed to generate description' });
     }
   });
 

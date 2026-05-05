@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { ArrowLeft, Download, Mail, Sparkles, Plus, Trash2, Save } from "lucide-react";
+import { ArrowLeft, Download, Mail, Plus, Trash2, Save } from "lucide-react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import InvoicePreview from "../components/InvoicePreview";
 import { Card, CardContent } from "../components/ui/card";
@@ -18,7 +18,6 @@ export default function CreateInvoice() {
   const editInvoice = location.state?.editInvoice;
   const previewRef = useRef<HTMLDivElement>(null);
   
-  const [loadingAI, setLoadingAI] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadingPdf, setLoadingPdf] = useState(false);
 
@@ -143,28 +142,6 @@ export default function CreateInvoice() {
   const removeService = (index: number) => {
     const newServices = formData.services.filter((_, i) => i !== index);
     setFormData({ ...formData, services: newServices });
-  };
-
-  const generateDescription = async (index: number) => {
-    const currentDesc = formData.services[index].description;
-    if (!currentDesc) return;
-    
-    setLoadingAI(true);
-    try {
-      const res = await fetch('/api/generate-description', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: currentDesc })
-      });
-      const data = await res.json();
-      if (data.description) {
-        updateService(index, 'description', data.description);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingAI(false);
-    }
   };
 
   const handleDownloadPDF = async () => {
@@ -426,14 +403,6 @@ export default function CreateInvoice() {
                       <div>
                         <div className="flex justify-between items-center mb-1.5">
                            <Label>Description</Label>
-                           <button 
-                             onClick={() => generateDescription(index)}
-                             disabled={!service.description || loadingAI}
-                             className="text-xs flex items-center text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
-                           >
-                             <Sparkles className="w-3 h-3 mr-1" />
-                             {loadingAI ? 'Processing...' : 'AI Enhance'}
-                           </button>
                         </div>
                         <Textarea 
                           placeholder="e.g. Deep cleaning service..."
