@@ -1,0 +1,456 @@
+import { useState, useRef, useEffect } from "react";
+import { ArrowLeft, Download, Mail, Sparkles, Plus, Trash2, Save } from "lucide-react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import InvoicePreview from "../components/InvoicePreview";
+import { Card, CardContent } from "../components/ui/card";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Button } from "../components/ui/button";
+import { Textarea } from "../components/ui/textarea";
+import { Badge } from "../components/ui/badge";
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+
+export default function CreateInvoice() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const prefilledClient = location.state?.client;
+  const editInvoice = location.state?.editInvoice;
+  const previewRef = useRef<HTMLDivElement>(null);
+  
+  const [loadingAI, setLoadingAI] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loadingPdf, setLoadingPdf] = useState(false);
+
+  const getPrefix = (invoiceNumber?: string) => {
+    if (invoiceNumber) {
+      const match = invoiceNumber.match(/^(INV-\d{6}1)(.*)$/);
+      if (match) return match[1];
+    }
+    return `INV-${new Date().getFullYear()}${String(new Date().getMonth()+1).padStart(2, '0')}1`;
+  };
+
+  const getSuffix = (invoiceNumber?: string) => {
+    if (invoiceNumber) {
+      const match = invoiceNumber.match(/^(INV-\d{6}1)(.*)$/);
+      if (match) return match[2];
+      return invoiceNumber;
+    }
+    return '001';
+  };
+
+  const [invoicePrefix, setInvoicePrefix] = useState(getPrefix(editInvoice?.invoice_number));
+  const [invoiceSuffix, setInvoiceSuffix] = useState(getSuffix(editInvoice?.invoice_number));
+
+  const [formData, setFormData] = useState({
+    id: editInvoice?.id || null,
+    invoice_number: editInvoice?.invoice_number || `${getPrefix()}${getSuffix()}`,
+    date: editInvoice?.date ? new Date(editInvoice.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+    due_date: editInvoice?.due_date ? new Date(editInvoice.due_date).toISOString().split('T')[0] : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    customer_id: editInvoice?.customer_id || prefilledClient?.id || null,
+    customer_name: editInvoice?.customer_name || editInvoice?.name || prefilledClient?.name || "",
+    customer_address: editInvoice?.customer_address || editInvoice?.address || prefilledClient?.address || "",
+    contact_person: editInvoice?.contact_person || prefilledClient?.contact_person || "",
+    notes: editInvoice?.notes || "",
+    gst_enabled: editInvoice?.gst_enabled || false,
+    services: editInvoice?.services && editInvoice.services.length > 0 ? editInvoice.services.map((s: any) => ({
+      ...s,
+      quantity: Number(s.quantity),
+      unit_price: Number(s.unit_price),
+      total: Number(s.total)
+    })) : [
+      { description: "", quantity: 1, unit_price: 0, total: 0 }
+    ]
+  });
+
+  const [gstPercentage, setGstPercentage] = useState(9.0);
+  const [lastInvoiceNumber, setLastInvoiceNumber] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/profile')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.gst_percentage != null) {
+          setGstPercentage(Number(data.gst_percentage));
+        }
+      })
+      .catch(console.error);
+
+    fetch('/api/invoices')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.length > 0) {
+          data.sort((a: any, b: any) => b.id - a.id);
+          setLastInvoiceNumber(data[0].invoice_number);
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    setFormData(prev => ({ ...prev, invoice_number: `${invoicePrefix}${invoiceSuffix}` }));
+  }, [invoicePrefix, invoiceSuffix]);
+
+  // Derived state
+  const subtotal = formData.services.reduce((acc, curr) => acc + (curr.total || 0), 0);
+  const gst_amount = formData.gst_enabled ? subtotal * (gstPercentage / 100) : 0; 
+  const total_amount = subtotal + gst_amount;
+
+  const invoiceData = {
+    ...formData,
+    subtotal,
+    gst_amount,
+    total_amount,
+  };
+
+  const updateService = (index: number, field: string, value: any) => {
+    const newServices = [...formData.services];
+    newServices[index] = { ...newServices[index], [field]: value };
+    
+    // Auto calculate total
+    if (field === 'quantity' || field === 'unit_price') {
+      const q = Number(newServices[index].quantity) || 0;
+      const p = Number(newServices[index].unit_price) || 0;
+      newServices[index].total = q * p;
+    }
+    
+    setFormData({ ...formData, services: newServices });
+  };
+
+  const addService = () => {
+    setFormData({
+      ...formData,
+      services: [...formData.services, { description: "", quantity: 1, unit_price: 0, total: 0 }]
+    });
+  };
+
+  const removeService = (index: number) => {
+    const newServices = formData.services.filter((_, i) => i !== index);
+    setFormData({ ...formData, services: newServices });
+  };
+
+  const generateDescription = async (index: number) => {
+    const currentDesc = formData.services[index].description;
+    if (!currentDesc) return;
+    
+    setLoadingAI(true);
+    try {
+      const res = await fetch('/api/generate-description', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: currentDesc })
+      });
+      const data = await res.json();
+      if (data.description) {
+        updateService(index, 'description', data.description);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingAI(false);
+    }
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!previewRef.current) return;
+    setLoadingPdf(true);
+    try {
+      const canvas = await html2canvas(previewRef.current, {
+        scale: 2, // Better quality
+        useCORS: true,
+        logging: false
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height] 
+      });
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+      pdf.save(`${formData.invoice_number}.pdf`);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingPdf(false);
+    }
+  };
+
+  const handleSaveInvoice = async () => {
+    setSaving(true);
+    try {
+      let custId = formData.customer_id;
+      
+      // 1. Create customer or get customer ID
+      if (!custId) {
+        const custRes = await fetch('/api/customers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: formData.customer_name || 'Draft Customer',
+            address: formData.customer_address,
+            contact_person: formData.contact_person
+          })
+        });
+        const custData = await custRes.json();
+        custId = custData.id;
+      }
+      
+      // 2. Create or Update invoice
+      const url = formData.id ? `/api/invoices/${formData.id}` : '/api/invoices';
+      const method = formData.id ? 'PUT' : 'POST';
+
+      const invRes = await fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_id: custId,
+          invoice_number: formData.invoice_number,
+          date: formData.date,
+          due_date: formData.due_date,
+          notes: formData.notes,
+          gst_enabled: formData.gst_enabled,
+          gst_amount: gst_amount,
+          subtotal: subtotal,
+          total_amount: total_amount,
+          services: formData.services
+        })
+      });
+      
+      if (invRes.ok) {
+        navigate(formData.id ? `/invoices/${formData.id}` : '/');
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Top Bar */}
+      <div className="border-b bg-white px-4 sm:px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
+        <div className="flex items-center gap-4">
+          <Link to="/" className="text-slate-500 hover:text-slate-800 transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold">New Invoice</h2>
+            <Badge variant="secondary" className="bg-blue-100 text-blue-700">Draft</Badge>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <Button variant="outline" className="flex-1 sm:flex-none gap-2 text-blue-600 border-blue-600 hover:bg-blue-50 hover:text-blue-700" onClick={handleDownloadPDF} disabled={loadingPdf}>
+            <Download className="w-4 h-4" />
+            {loadingPdf ? 'Generating...' : 'PDF'}
+          </Button>
+          <Button variant="outline" className="flex-1 sm:flex-none gap-2 text-blue-600 border-blue-600 hover:bg-blue-50 hover:text-blue-700">
+            <Mail className="w-4 h-4" />
+            Email
+          </Button>
+          <Button className="flex-1 sm:flex-none gap-2 bg-blue-600 text-white hover:bg-blue-700 shadow-sm" onClick={handleSaveInvoice} disabled={saving}>
+            <Save className="w-4 h-4" />
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden p-4 sm:p-6 gap-6">
+        {/* Left Form */}
+        <div className="w-full lg:w-[380px] flex flex-col gap-4 overflow-y-auto lg:pr-2 hide-scrollbar shrink-0">  
+          <div className="space-y-6 max-w-2xl mx-auto w-full">
+            {/* Invoice Details Card */}
+            <Card className="rounded-xl shadow-sm border-slate-200 overflow-hidden">
+              <div className="bg-slate-100/50 px-4 py-3 border-b text-sm font-semibold text-slate-800">
+                Invoice Details
+              </div>
+              <CardContent className="p-4 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5 col-span-2 sm:col-span-1">
+                    <Label>Invoice Number</Label>
+                    <div className="flex">
+                      <div className="bg-slate-100 border border-r-0 border-input rounded-l-md px-3 py-2 text-sm text-slate-500 whitespace-nowrap flex items-center">
+                        {invoicePrefix}
+                      </div>
+                      <Input 
+                        className="rounded-l-none pl-2"
+                        value={invoiceSuffix}
+                        onChange={e => setInvoiceSuffix(e.target.value)}
+                        placeholder="001"
+                      />
+                    </div>
+                    {lastInvoiceNumber && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Last Invoice: <span className="font-medium text-slate-700">{lastInvoiceNumber}</span>
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Date</Label>
+                    <Input 
+                      type="date" 
+                      value={formData.date}
+                      onChange={e => setFormData({...formData, date: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Due Date</Label>
+                    <Input 
+                      type="date" 
+                      value={formData.due_date}
+                      onChange={e => setFormData({...formData, due_date: e.target.value})}
+                    />
+                  </div>
+                  <div className="flex items-center space-x-2 pt-6">
+                    <input 
+                      type="checkbox" 
+                      id="gst"
+                      className="rounded border-slate-300"
+                      checked={formData.gst_enabled}
+                      onChange={e => setFormData({...formData, gst_enabled: e.target.checked})}
+                    />
+                    <Label htmlFor="gst">Include 9% GST</Label>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Client Details Card */}
+            <Card className="rounded-xl shadow-sm border-slate-200 overflow-hidden">
+              <div className="bg-slate-100/50 px-4 py-3 border-b text-sm font-semibold text-slate-800">
+                Bill To
+              </div>
+              <CardContent className="p-4 space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Client Name</Label>
+                  <Input 
+                    placeholder="Enter client or company name"
+                    value={formData.customer_name}
+                    onChange={e => setFormData({...formData, customer_name: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Address</Label>
+                  <Textarea 
+                    placeholder="Client address" 
+                    className="min-h-[80px]"
+                    value={formData.customer_address}
+                    onChange={e => setFormData({...formData, customer_address: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Attention To</Label>
+                  <Input 
+                    placeholder="Contact person name"
+                    value={formData.contact_person}
+                    onChange={e => setFormData({...formData, contact_person: e.target.value})}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Services Table Card */}
+            <Card className="rounded-xl shadow-sm border-slate-200 overflow-hidden">
+              <div className="bg-slate-100/50 px-4 py-3 border-b flex justify-between items-center text-sm font-semibold text-slate-800">
+                Services
+                <Button variant="ghost" size="sm" className="h-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={addService}>
+                  <Plus className="w-4 h-4 mr-1" /> Add Row
+                </Button>
+              </div>
+              <CardContent className="p-0">
+                {formData.services.map((service, index) => (
+                  <div key={index} className="p-4 border-b last:border-0 hover:bg-slate-50/50 transition-colors">
+                    <div className="flex justify-between items-center mb-3">
+                      <Label className="font-semibold text-slate-700">Line Item {index + 1}</Label>
+                      <button 
+                        onClick={() => removeService(index)}
+                        className="text-slate-400 hover:text-red-500 transition-colors"
+                        disabled={formData.services.length === 1}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex justify-between items-center mb-1.5">
+                           <Label>Description</Label>
+                           <button 
+                             onClick={() => generateDescription(index)}
+                             disabled={!service.description || loadingAI}
+                             className="text-xs flex items-center text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                           >
+                             <Sparkles className="w-3 h-3 mr-1" />
+                             {loadingAI ? 'Processing...' : 'AI Enhance'}
+                           </button>
+                        </div>
+                        <Textarea 
+                          placeholder="e.g. Deep cleaning service..."
+                          value={service.description}
+                          onChange={e => updateService(index, 'description', e.target.value)}
+                          className="min-h-[60px]"
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="space-y-1.5">
+                          <Label>Qty / Pax</Label>
+                          <Input 
+                            type="number" 
+                            min="1"
+                            value={service.quantity || ''}
+                            onChange={e => updateService(index, 'quantity', e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Unit Price ($)</Label>
+                          <Input 
+                            type="number"
+                            min="0"
+                            value={service.unit_price || ''}
+                            onChange={e => updateService(index, 'unit_price', e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Total</Label>
+                          <div className="h-10 px-3 flex items-center bg-slate-100 rounded-md border text-slate-600 font-medium">
+                            ${service.total.toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Additional Notes */}
+            <Card className="rounded-xl shadow-sm border-slate-200 overflow-hidden">
+              <div className="bg-slate-100/50 px-4 py-3 border-b text-sm font-semibold text-slate-800">
+                Additional Notes
+              </div>
+              <CardContent className="p-4">
+                <Textarea 
+                  placeholder="Terms and conditions, payment terms, or thank you message..."
+                  className="min-h-[100px]"
+                  value={formData.notes}
+                  onChange={e => setFormData({...formData, notes: e.target.value})}
+                />
+              </CardContent>
+            </Card>
+
+          </div>
+        </div>
+
+        {/* Right Live Preview */}
+        <div className="flex-1 bg-slate-200 rounded-xl overflow-y-auto overflow-x-auto p-4 sm:p-8 flex justify-center lg:justify-center items-start w-full lg:w-auto mt-6 lg:mt-0">
+           <div className="shadow-2xl rounded-sm overflow-hidden bg-white shrink-0 origin-top-left transform scale-[0.6] sm:scale-75 lg:scale-100 xl:scale-100 transition-transform">
+             {/* Note passing previewRef to capture for PDF */}
+             <InvoicePreview data={invoiceData} previewRef={previewRef} />
+           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
