@@ -74,7 +74,7 @@ function MainLayout() {
     <div className="flex h-screen w-full bg-slate-50 font-sans overflow-hidden">
       <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
       
-      <main className="flex-1 flex flex-col text-slate-800 lg:h-full">
+      <main className="flex-1 flex flex-col overflow-hidden text-slate-800 w-full min-w-0">
         {/* Mobile Header Toggle */}
         <div className="lg:hidden bg-white border-b border-slate-200 p-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
@@ -86,7 +86,7 @@ function MainLayout() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden w-full max-w-full min-h-0">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/clients" element={<Clients />} />

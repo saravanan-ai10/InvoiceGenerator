@@ -244,9 +244,9 @@ export default function CreateInvoice() {
   };
 
   return (
-    <div className="flex flex-col min-h-full">
+    <div className="flex flex-col h-full w-full bg-slate-50 min-w-0">
       {/* Top Bar */}
-      <div className="border-b bg-white px-4 sm:px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
+      <div className="border-b bg-white px-4 sm:px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0 w-full min-w-0">
         <div className="flex items-center gap-4">
           <Link to="/" className="text-slate-500 hover:text-slate-800 transition-colors">
             <ArrowLeft className="w-5 h-5" />
@@ -258,45 +258,45 @@ export default function CreateInvoice() {
             </Badge>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-          <Button variant="outline" className="flex-1 sm:flex-none gap-2 text-blue-600 border-blue-600 hover:bg-blue-50 hover:text-blue-700" onClick={handleDownloadPDF} disabled={loadingPdf}>
-            <Download className="w-4 h-4" />
-            {loadingPdf ? 'Generating...' : 'PDF'}
+        <div className="flex flex-row flex-wrap items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+          <Button variant="outline" className="flex-1 sm:flex-none gap-1 sm:gap-2 text-blue-600 border-blue-600 hover:bg-blue-50 hover:text-blue-700 px-2 sm:px-4 min-w-[80px]" onClick={handleDownloadPDF} disabled={loadingPdf}>
+            <Download className="w-4 h-4 shrink-0" />
+            <span className="text-sm font-medium truncate">{loadingPdf ? 'PDF...' : 'PDF'}</span>
           </Button>
-          <Button variant="outline" className="flex-1 sm:flex-none gap-2 text-blue-600 border-blue-600 hover:bg-blue-50 hover:text-blue-700">
-            <Mail className="w-4 h-4" />
-            Email
+          <Button variant="outline" className="flex-1 sm:flex-none gap-1 sm:gap-2 text-blue-600 border-blue-600 hover:bg-blue-50 hover:text-blue-700 px-2 sm:px-4 min-w-[80px]">
+            <Mail className="w-4 h-4 shrink-0" />
+            <span className="text-sm font-medium truncate">Email</span>
           </Button>
           <Button 
-            className="flex-1 sm:flex-none gap-2 bg-blue-600 text-white hover:bg-blue-700 shadow-sm" 
+            className="flex-1 sm:flex-none gap-1 sm:gap-2 bg-blue-600 text-white hover:bg-blue-700 shadow-sm px-2 sm:px-4 min-w-[80px]" 
             onClick={handleSaveInvoice} 
             disabled={saving || isDuplicate}
           >
-            <Save className="w-4 h-4" />
-            {saving ? 'Saving...' : 'Save'}
+            <Save className="w-4 h-4 shrink-0" />
+            <span className="text-sm font-medium truncate">{saving ? 'Saving...' : 'Save'}</span>
           </Button>
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row flex-1 p-4 sm:p-6 gap-6 lg:overflow-hidden">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6 flex flex-col lg:flex-row gap-6 w-full max-w-full min-w-0">
         {/* Left Form */}
-        <div className="w-full lg:w-[380px] flex flex-col gap-4 lg:overflow-y-auto lg:pr-2 hide-scrollbar shrink-0">  
-          <div className="space-y-6 max-w-2xl mx-auto w-full">
+        <div className="w-full lg:w-[420px] flex flex-col gap-4 lg:overflow-y-auto lg:pr-2 hide-scrollbar shrink-0 max-w-full min-w-0">  
+          <div className="space-y-4 sm:space-y-6 w-full">
             {/* Invoice Details Card */}
-            <Card className="rounded-xl shadow-sm border-slate-200 overflow-hidden">
+            <Card className="rounded-xl shadow-sm border-slate-200 overflow-hidden w-full">
               <div className="bg-slate-100/50 px-4 py-3 border-b text-sm font-semibold text-slate-800">
                 Invoice Details
               </div>
               <CardContent className="p-4 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
+                  <div className="space-y-1.5 sm:col-span-2">
                     <Label>Invoice Number</Label>
                     <div className="flex w-full">
-                      <div className="bg-slate-100 border border-r-0 border-input rounded-l-md px-3 py-2 text-sm text-slate-500 whitespace-nowrap flex items-center shrink-0">
+                      <div className="bg-slate-100 border border-r-0 border-input rounded-l-md px-3 py-2 text-sm text-slate-500 flex items-center shrink-0">
                         {invoicePrefix}
                       </div>
                       <Input 
-                        className={`rounded-l-none pl-2 flex-1 w-auto min-w-0 ${isDuplicate ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                        className={`rounded-l-none pl-2 flex-1 min-w-0 ${isDuplicate ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                         value={invoiceSuffix}
                         onChange={e => setInvoiceSuffix(e.target.value)}
                         placeholder="001"
@@ -313,38 +313,40 @@ export default function CreateInvoice() {
                       </p>
                     )}
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 w-full">
                     <Label>Date</Label>
                     <Input 
                       type="date" 
                       value={formData.date}
                       onChange={e => setFormData({...formData, date: e.target.value})}
+                      className="w-full"
                     />
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 w-full">
                     <Label>Due Date</Label>
                     <Input 
                       type="date" 
                       value={formData.due_date}
                       onChange={e => setFormData({...formData, due_date: e.target.value})}
+                      className="w-full"
                     />
                   </div>
                   <div className="flex items-center space-x-2 pt-2 sm:pt-6 sm:col-span-2">
                     <input 
                       type="checkbox" 
                       id="gst"
-                      className="rounded border-slate-300"
+                      className="rounded border-slate-300 w-4 h-4 text-blue-600"
                       checked={formData.gst_enabled}
                       onChange={e => setFormData({...formData, gst_enabled: e.target.checked})}
                     />
-                    <Label htmlFor="gst">Include 9% GST</Label>
+                    <Label htmlFor="gst" className="font-medium text-sm">Include 9% GST</Label>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             {/* Client Details Card */}
-            <Card className="rounded-xl shadow-sm border-slate-200 overflow-hidden">
+            <Card className="rounded-xl shadow-sm border-slate-200 overflow-hidden w-full">
               <div className="bg-slate-100/50 px-4 py-3 border-b text-sm font-semibold text-slate-800">
                 Bill To
               </div>
@@ -355,13 +357,14 @@ export default function CreateInvoice() {
                     placeholder="Enter client or company name"
                     value={formData.customer_name}
                     onChange={e => setFormData({...formData, customer_name: e.target.value})}
+                    className="w-full"
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Address</Label>
                   <Textarea 
                     placeholder="Client address" 
-                    className="min-h-[80px]"
+                    className="min-h-[80px] w-full"
                     value={formData.customer_address}
                     onChange={e => setFormData({...formData, customer_address: e.target.value})}
                   />
@@ -372,17 +375,18 @@ export default function CreateInvoice() {
                     placeholder="Contact person name"
                     value={formData.contact_person}
                     onChange={e => setFormData({...formData, contact_person: e.target.value})}
+                    className="w-full"
                   />
                 </div>
               </CardContent>
             </Card>
 
             {/* Services Table Card */}
-            <Card className="rounded-xl shadow-sm border-slate-200 overflow-hidden">
+            <Card className="rounded-xl shadow-sm border-slate-200 overflow-hidden w-full">
               <div className="bg-slate-100/50 px-4 py-3 border-b flex justify-between items-center text-sm font-semibold text-slate-800">
                 Services
-                <Button variant="ghost" size="sm" className="h-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={addService}>
-                  <Plus className="w-4 h-4 mr-1" /> Add Row
+                <Button variant="ghost" size="sm" className="h-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2" onClick={addService}>
+                  <Plus className="w-4 h-4 sm:mr-1" /> <span className="hidden sm:inline">Add Row</span>
                 </Button>
               </div>
               <CardContent className="p-0">
@@ -392,15 +396,15 @@ export default function CreateInvoice() {
                       <Label className="font-semibold text-slate-700">Line Item {index + 1}</Label>
                       <button 
                         onClick={() => removeService(index)}
-                        className="text-slate-400 hover:text-red-500 transition-colors"
+                        className="text-slate-400 hover:text-red-500 transition-colors p-1"
                         disabled={formData.services.length === 1}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                     
-                    <div className="space-y-3">
-                      <div>
+                    <div className="space-y-3 w-full">
+                      <div className="w-full">
                         <div className="flex justify-between items-center mb-1.5">
                            <Label>Description</Label>
                         </div>
@@ -408,32 +412,34 @@ export default function CreateInvoice() {
                           placeholder="e.g. Deep cleaning service..."
                           value={service.description}
                           onChange={e => updateService(index, 'description', e.target.value)}
-                          className="min-h-[60px]"
+                          className="min-h-[60px] w-full"
                         />
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div className="space-y-1.5">
-                          <Label>Qty / Pax</Label>
+                      <div className="flex flex-wrap sm:grid sm:grid-cols-3 gap-3">
+                        <div className="space-y-1.5 flex-1 min-w-[30%]">
+                          <Label className="text-xs sm:text-sm">Qty / Pax</Label>
                           <Input 
                             type="number" 
                             min="1"
                             value={service.quantity || ''}
                             onChange={e => updateService(index, 'quantity', e.target.value)}
+                            className="w-full px-2"
                           />
                         </div>
-                        <div className="space-y-1.5">
-                          <Label>Unit Price ($)</Label>
+                        <div className="space-y-1.5 flex-1 min-w-[40%]">
+                          <Label className="text-xs sm:text-sm truncate">Unit Price ($)</Label>
                           <Input 
                             type="number"
                             min="0"
                             value={service.unit_price || ''}
                             onChange={e => updateService(index, 'unit_price', e.target.value)}
+                            className="w-full px-2"
                           />
                         </div>
-                        <div className="space-y-1.5">
-                          <Label>Total</Label>
+                        <div className="space-y-1.5 w-full sm:col-span-1">
+                          <Label className="text-xs sm:text-sm">Total ($)</Label>
                           <div className="h-10 px-3 flex items-center bg-slate-100 rounded-md border text-slate-600 font-medium">
-                            ${service.total.toFixed(2)}
+                            {service.total.toFixed(2)}
                           </div>
                         </div>
                       </div>
@@ -444,14 +450,14 @@ export default function CreateInvoice() {
             </Card>
 
             {/* Additional Notes */}
-            <Card className="rounded-xl shadow-sm border-slate-200 overflow-hidden">
+            <Card className="rounded-xl shadow-sm border-slate-200 overflow-hidden w-full">
               <div className="bg-slate-100/50 px-4 py-3 border-b text-sm font-semibold text-slate-800">
                 Additional Notes
               </div>
               <CardContent className="p-4">
                 <Textarea 
                   placeholder="Terms and conditions, payment terms, or thank you message..."
-                  className="min-h-[100px]"
+                  className="min-h-[100px] w-full"
                   value={formData.notes}
                   onChange={e => setFormData({...formData, notes: e.target.value})}
                 />
@@ -462,9 +468,8 @@ export default function CreateInvoice() {
         </div>
 
         {/* Right Live Preview */}
-        <div className="flex-1 bg-slate-200 rounded-xl overflow-y-auto overflow-x-auto p-4 sm:p-8 flex justify-center lg:justify-center items-start w-full lg:w-auto mt-6 lg:mt-0 lg:min-h-0 min-h-[400px]">
-           <div className="shadow-2xl rounded-sm overflow-hidden bg-white shrink-0 origin-top-left transform scale-[0.6] sm:scale-75 lg:scale-100 xl:scale-100 transition-transform">
-             {/* Note passing previewRef to capture for PDF */}
+        <div className="w-full lg:flex-1 shrink-0 bg-slate-200 rounded-xl overflow-auto p-4 sm:p-8 min-h-[400px] min-w-0 max-w-full">
+           <div className="shadow-xl rounded-sm overflow-hidden bg-white shrink-0 mx-auto w-fit">
              <InvoicePreview data={invoiceData} previewRef={previewRef} />
            </div>
         </div>
