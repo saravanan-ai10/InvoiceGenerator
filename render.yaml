@@ -7,10 +7,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: JWT_SECRET
-        generateValue: true
       - key: ADMIN_EMAIL
         value: admin@example.com # Replace with your email in the Render Dashboard
       - key: ADMIN_PASSWORD
         value: admin123 # Replace with a secure password in the Render Dashboard
-      # DATABASE_URL is omitted here because you already have it in your Render environment tab.
+      # DATABASE_URL and JWT_SECRET are omitted here because you can configure them in your Render environment tab.
