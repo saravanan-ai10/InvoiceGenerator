@@ -11,6 +11,8 @@ import { Badge } from "../components/ui/badge";
 import { toCanvas } from 'html-to-image';
 import jsPDF from 'jspdf';
 
+import ResponsivePreview from "../components/ResponsivePreview";
+
 export default function CreateInvoice() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -22,29 +24,42 @@ export default function CreateInvoice() {
   const [loadingPdf, setLoadingPdf] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
 
-  const getPrefix = (invoiceNumber?: string) => {
+  const [docType, setDocType] = useState<'invoice'|'purchase_order'|'quotation'>(editInvoice?.type || 'invoice');
+
+  const getPrefix = (type: string, invoiceNumber?: string) => {
     if (invoiceNumber) {
-      const match = invoiceNumber.match(/^(INV-\d{6}1)(.*)$/);
+      const match = invoiceNumber.match(/^([A-Z]+-\d{6}(?:1|001)?)(.*)$/);
       if (match) return match[1];
     }
-    return `INV-${new Date().getFullYear()}${String(new Date().getMonth()+1).padStart(2, '0')}1`;
+    const prefixMap: Record<string, string> = {
+      'invoice': 'INV',
+      'purchase_order': 'PO',
+      'quotation': 'QUO'
+    };
+    return `${prefixMap[type] || 'INV'}-${new Date().getFullYear()}${String(new Date().getMonth()+1).padStart(2, '0')}1`;
   };
 
   const getSuffix = (invoiceNumber?: string) => {
     if (invoiceNumber) {
-      const match = invoiceNumber.match(/^(INV-\d{6}1)(.*)$/);
+      const match = invoiceNumber.match(/^([A-Z]+-\d{6}(?:1|001)?)(.*)$/);
       if (match) return match[2];
       return invoiceNumber;
     }
-    return '001';
+    return '';
   };
 
-  const [invoicePrefix, setInvoicePrefix] = useState(getPrefix(editInvoice?.invoice_number));
+  const [invoicePrefix, setInvoicePrefix] = useState(getPrefix(editInvoice?.type || 'invoice', editInvoice?.invoice_number));
   const [invoiceSuffix, setInvoiceSuffix] = useState(getSuffix(editInvoice?.invoice_number));
+
+  useEffect(() => {
+    if (!editInvoice) {
+      setInvoicePrefix(getPrefix(docType));
+    }
+  }, [docType]);
 
   const [formData, setFormData] = useState({
     id: editInvoice?.id || null,
-    invoice_number: editInvoice?.invoice_number || `${getPrefix()}${getSuffix()}`,
+    invoice_number: editInvoice?.invoice_number || `${getPrefix(editInvoice?.type || 'invoice')}${getSuffix()}`,
     date: editInvoice?.date ? new Date(editInvoice.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
     due_date: editInvoice?.due_date ? new Date(editInvoice.due_date).toISOString().split('T')[0] : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     customer_id: editInvoice?.customer_id || prefilledClient?.id || null,
@@ -114,6 +129,7 @@ export default function CreateInvoice() {
 
   const invoiceData = {
     ...formData,
+    type: docType,
     subtotal,
     gst_amount,
     total_amount,
@@ -121,13 +137,22 @@ export default function CreateInvoice() {
 
   const updateService = (index: number, field: string, value: any) => {
     const newServices = [...formData.services];
-    newServices[index] = { ...newServices[index], [field]: value };
+    let processedValue = value;
+    if (field === 'quantity' || field === 'unit_price') {
+      const numValue = Number(value);
+      if (numValue < 0) {
+        processedValue = Math.max(0, numValue); // Will be 0
+      } else if (value === '-' || value.toString().includes('-')) {
+        processedValue = 0;
+      }
+    }
+    newServices[index] = { ...newServices[index], [field]: processedValue };
     
     // Auto calculate total
     if (field === 'quantity' || field === 'unit_price') {
       const q = Number(newServices[index].quantity) || 0;
       const p = Number(newServices[index].unit_price) || 0;
-      newServices[index].total = q * p;
+      newServices[index].total = Math.max(0, q * p);
     }
     
     setFormData({ ...formData, services: newServices });
@@ -153,14 +178,17 @@ export default function CreateInvoice() {
         pixelRatio: 2
       });
       
-      const imgData = canvas.toDataURL('image/png');
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
       const pdf = new jsPDF({
         orientation: 'portrait',
-        unit: 'px',
-        format: [canvas.width, canvas.height] 
+        unit: 'mm',
+        format: 'a4' 
       });
       
-      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
       pdf.save(`${formData.invoice_number}.pdf`);
     } catch (e) {
       console.error(e);
@@ -177,13 +205,16 @@ export default function CreateInvoice() {
       if (navigator.share && previewRef.current && navigator.canShare) {
         setLoadingPdf(true); // Indicate loading using the same state
         const canvas = await toCanvas(previewRef.current, { pixelRatio: 2 });
-        const imgData = canvas.toDataURL('image/png');
+        const imgData = canvas.toDataURL('image/jpeg', 1.0);
         const pdf = new jsPDF({
           orientation: 'portrait',
-          unit: 'px',
-          format: [canvas.width, canvas.height] 
+          unit: 'mm',
+          format: 'a4' 
         });
-        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        
+        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
         
         const pdfBlob = pdf.output('blob');
         const file = new File([pdfBlob], `${formData.invoice_number}.pdf`, { type: 'application/pdf' });
@@ -262,7 +293,8 @@ export default function CreateInvoice() {
           gst_amount: gst_amount,
           subtotal: subtotal,
           total_amount: total_amount,
-          services: formData.services
+          services: formData.services,
+          type: docType
         })
       });
       
@@ -328,22 +360,39 @@ export default function CreateInvoice() {
           <div className="space-y-4 sm:space-y-6 w-full">
             {/* Invoice Details Card */}
             <Card className="rounded-xl shadow-sm border-slate-200 overflow-hidden w-full">
-              <div className="bg-slate-100/50 px-4 py-3 border-b text-sm font-semibold text-slate-800">
-                Invoice Details
+              <div className="bg-slate-100/50 px-4 py-3 border-b text-sm font-semibold text-slate-800 flex justify-between items-center">
+                <span>Document Details</span>
+                <select 
+                  className="bg-white border rounded text-xs px-2 py-1"
+                  value={docType}
+                  onChange={(e: any) => setDocType(e.target.value)}
+                  disabled={formData.id != null}
+                >
+                  <option value="invoice">Invoice</option>
+                  <option value="purchase_order">Purchase Order</option>
+                  <option value="quotation">Quotation</option>
+                </select>
               </div>
               <CardContent className="p-4 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5 sm:col-span-2">
-                    <Label>Invoice Number</Label>
+                    <Label>Document Number</Label>
                     <div className="flex w-full">
                       <div className="bg-slate-100 border border-r-0 border-input rounded-l-md px-3 py-2 text-sm text-slate-500 flex items-center shrink-0">
                         {invoicePrefix}
                       </div>
                       <Input 
                         className={`rounded-l-none pl-2 flex-1 min-w-0 ${isDuplicate ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                        type="number"
+                        min="0"
                         value={invoiceSuffix}
-                        onChange={e => setInvoiceSuffix(e.target.value)}
-                        placeholder="001"
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (!val.includes('-') && Number(val) >= 0) {
+                            setInvoiceSuffix(val);
+                          }
+                        }}
+                        placeholder="01"
                       />
                     </div>
                     {isDuplicate && (
@@ -512,11 +561,9 @@ export default function CreateInvoice() {
         </div>
 
         {/* Right Live Preview */}
-        <div className="w-full lg:flex-1 shrink-0 bg-slate-200 rounded-xl overflow-auto p-4 sm:p-8 min-h-[400px] min-w-0 max-w-full">
-           <div className="shadow-xl rounded-sm overflow-hidden bg-white shrink-0 mx-auto w-fit">
-             <InvoicePreview data={invoiceData} previewRef={previewRef} />
-           </div>
-        </div>
+        <ResponsivePreview>
+          <InvoicePreview data={invoiceData} previewRef={previewRef} />
+        </ResponsivePreview>
       </div>
     </div>
   );

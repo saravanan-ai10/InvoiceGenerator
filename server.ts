@@ -2,13 +2,26 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import pg from 'pg';
 import path from 'path';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 const { Pool } = pg;
+const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@admin.com';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
 // Simple in-memory fallback store if DATABASE_URL is missing
 let memCustomers: any[] = [];
 let memInvoices: any[] = [];
 let memServices: any[] = [];
+let memUsers: any[] = [];
+let memIdCounter = 1;
+
+// Seed memory user
+bcrypt.hash(ADMIN_PASSWORD, 10).then(hash => {
+  memUsers.push({ id: memIdCounter++, email: ADMIN_EMAIL, password_hash: hash });
+});
+
 let memProfile: any = {
   company_name: 'Sparksfly O&G Pte Ltd',
   address: '123 Industrial Park Rd, #04-56\nSingapore 678901',
@@ -19,7 +32,7 @@ let memProfile: any = {
   bank_account_no: '123-456789-001',
   gst_percentage: 9.0
 };
-let memIdCounter = 1;
+
 
 let pool: pg.Pool | null = null;
 if (process.env.DATABASE_URL) {
@@ -62,6 +75,7 @@ if (process.env.DATABASE_URL) {
         ALTER TABLE invoices ADD COLUMN IF NOT EXISTS gst_enabled BOOLEAN DEFAULT false;
         ALTER TABLE invoices ADD COLUMN IF NOT EXISTS gst_amount NUMERIC(10, 2) DEFAULT 0;
         ALTER TABLE invoices ADD COLUMN IF NOT EXISTS subtotal NUMERIC(10, 2) DEFAULT 0;
+        ALTER TABLE invoices ADD COLUMN IF NOT EXISTS type VARCHAR(20) DEFAULT 'invoice';
         CREATE TABLE IF NOT EXISTS services (
           id SERIAL PRIMARY KEY,
           invoice_id INTEGER REFERENCES invoices(id),
@@ -81,11 +95,25 @@ if (process.env.DATABASE_URL) {
           bank_account_no VARCHAR(255),
           gst_percentage NUMERIC(5, 2) DEFAULT 9.0
         );
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          password_hash VARCHAR(255) NOT NULL,
+          reset_token VARCHAR(255),
+          reset_token_expires TIMESTAMP
+        );
         ALTER TABLE profile ADD COLUMN IF NOT EXISTS gst_percentage NUMERIC(5, 2) DEFAULT 9.0;
         INSERT INTO profile (id, company_name, address, phone, email, bank_name, bank_account_name, bank_account_no) 
         SELECT 1, 'Sparksfly O&G Pte Ltd', '123 Industrial Park Rd, #04-56\nSingapore 678901', '+65 6123 4567', 'contact@sparksfly.sg', 'OCBC Bank Singapore', 'Sparksfly O&G Pte Ltd', '123-456789-001'
         WHERE NOT EXISTS (SELECT 1 FROM profile WHERE id = 1);
       `);
+      
+      const userCheck = await pool.query('SELECT COUNT(*) FROM users');
+      if (parseInt(userCheck.rows[0].count) === 0) {
+        const defaultHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
+        await pool.query('INSERT INTO users (email, password_hash) VALUES ($1, $2)', [ADMIN_EMAIL, defaultHash]);
+      }
+      
       console.log('Database initialized successfully');
     } catch (err) {
       console.error('Failed to initialize database:', err);
@@ -101,7 +129,106 @@ async function startServer() {
   app.use(express.json());
 
   // --- API Routes ---
-  
+
+  // Auth Routes
+  app.post('/api/auth/register', async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+    const passwordHash = await bcrypt.hash(password, 10);
+    
+    if (pool) {
+      try {
+        const result = await pool.query(
+          'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email',
+          [email, passwordHash]
+        );
+        const user = result.rows[0];
+        const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+        res.json({ token, user: { id: user.id, email: user.email } });
+      } catch (err: any) {
+        if (err.code === '23505') return res.status(409).json({ error: 'Email already exists' });
+        res.status(500).json({ error: err.message });
+      }
+    } else {
+      if (memUsers.find(u => u.email === email)) return res.status(409).json({ error: 'Email already exists' });
+      const user = { id: memIdCounter++, email, password_hash: passwordHash };
+      memUsers.push(user);
+      const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+      res.json({ token, user: { id: user.id, email: user.email } });
+    }
+  });
+
+  app.post('/api/auth/login', async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+    
+    let user;
+    if (pool) {
+      const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+      user = result.rows[0];
+    } else {
+      user = memUsers.find(u => u.email === email);
+    }
+    
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+    
+    const isValid = await bcrypt.compare(password, user.password_hash);
+    if (!isValid) return res.status(401).json({ error: 'Invalid credentials' });
+    
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user: { id: user.id, email: user.email } });
+  });
+
+  app.post('/api/auth/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const expires = new Date(Date.now() + 3600000); // 1 hour
+    
+    if (pool) {
+      await pool.query('UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE email = $3', [token, expires, email]);
+      console.log(`Password reset requested for ${email}. Token: ${token} (simulate email sent)`);
+    } else {
+      const userIdx = memUsers.findIndex(u => u.email === email);
+      if (userIdx !== -1) {
+        memUsers[userIdx].reset_token = token;
+        memUsers[userIdx].reset_token_expires = expires;
+      }
+      console.log(`[Memory] Password reset requested for ${email}. Token: ${token}`);
+    }
+    
+    res.json({ message: 'If email exists, reset link sent. (Check server logs since there is no real email service)' });
+  });
+
+  app.post('/api/auth/reset-password', async (req, res) => {
+    const { email, token, newPassword } = req.body;
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    
+    if (pool) {
+      const result = await pool.query('SELECT * FROM users WHERE email = $1 AND reset_token = $2 AND reset_token_expires > NOW()', [email, token]);
+      if (result.rows.length === 0) return res.status(400).json({ error: 'Invalid or expired token' });
+      await pool.query('UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2', [passwordHash, result.rows[0].id]);
+    } else {
+      const userIdx = memUsers.findIndex(u => u.email === email && u.reset_token === token && u.reset_token_expires > new Date());
+      if (userIdx === -1) return res.status(400).json({ error: 'Invalid or expired token' });
+      memUsers[userIdx].password_hash = passwordHash;
+      memUsers[userIdx].reset_token = null;
+      memUsers[userIdx].reset_token_expires = null;
+    }
+    
+    res.json({ success: true, message: 'Password reset successfully' });
+  });
+
+  app.get('/api/auth/me', (req, res) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'No token' });
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      res.json({ user: { id: decoded.userId } });
+    } catch {
+      res.status(401).json({ error: 'Invalid token' });
+    }
+  });
+
   // Get Profile
   app.get('/api/profile', async (req, res) => {
     if (pool) {
@@ -237,16 +364,22 @@ async function startServer() {
   app.delete('/api/customers/:id', async (req, res) => {
     const id = parseInt(req.params.id);
     if (pool) {
+      const client = await pool.connect();
       try {
-        const invs = await pool.query('SELECT id FROM invoices WHERE customer_id = $1', [id]);
+        await client.query('BEGIN');
+        const invs = await client.query('SELECT id FROM invoices WHERE customer_id = $1', [id]);
         for (const inv of invs.rows) {
-          await pool.query('DELETE FROM services WHERE invoice_id = $1', [inv.id]);
-          await pool.query('DELETE FROM invoices WHERE id = $1', [inv.id]);
+          await client.query('DELETE FROM services WHERE invoice_id = $1', [inv.id]);
+          await client.query('DELETE FROM invoices WHERE id = $1', [inv.id]);
         }
-        await pool.query('DELETE FROM customers WHERE id = $1', [id]);
+        await client.query('DELETE FROM customers WHERE id = $1', [id]);
+        await client.query('COMMIT');
         res.json({ success: true });
       } catch (e: any) {
+        await client.query('ROLLBACK');
         res.status(500).json({ error: e.message });
+      } finally {
+        client.release();
       }
     } else {
       const invsToDel = memInvoices.filter(i => i.customer_id === id).map(i => i.id);
@@ -337,15 +470,15 @@ async function startServer() {
   // Update invoice
   app.put('/api/invoices/:id', async (req, res) => {
     const id = parseInt(req.params.id);
-    const { customer_id, invoice_number, date, due_date, notes, gst_enabled, gst_amount, subtotal, total_amount, services } = req.body;
+    const { customer_id, invoice_number, date, due_date, notes, gst_enabled, gst_amount, subtotal, total_amount, services, type = 'invoice' } = req.body;
     
     if (pool) {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
         await client.query(
-          'UPDATE invoices SET customer_id=$1, invoice_number=$2, date=$3, due_date=$4, notes=$5, gst_enabled=$6, gst_amount=$7, subtotal=$8, total_amount=$9 WHERE id=$10',
-          [customer_id, invoice_number, date, due_date, notes, gst_enabled ? true : false, gst_amount, subtotal, total_amount, id]
+          'UPDATE invoices SET customer_id=$1, invoice_number=$2, date=$3, due_date=$4, notes=$5, gst_enabled=$6, gst_amount=$7, subtotal=$8, total_amount=$9, type=$10 WHERE id=$11',
+          [customer_id, invoice_number, date, due_date, notes, gst_enabled ? true : false, gst_amount, subtotal, total_amount, type, id]
         );
         
         await client.query('DELETE FROM services WHERE invoice_id = $1', [id]);
@@ -375,7 +508,7 @@ async function startServer() {
       }
       const idx = memInvoices.findIndex(i => i.id === id);
       if (idx !== -1) {
-        memInvoices[idx] = { ...memInvoices[idx], customer_id, invoice_number, date, due_date, notes, gst_enabled, gst_amount, subtotal, total_amount };
+        memInvoices[idx] = { ...memInvoices[idx], customer_id, invoice_number, date, due_date, notes, gst_enabled, gst_amount, subtotal, total_amount, type };
         memServices = memServices.filter(s => s.invoice_id !== id);
         for (const s of services) {
           memServices.push({ id: Date.now() + Math.random(), invoice_id: id, ...s });
@@ -408,7 +541,7 @@ async function startServer() {
 
   // Create invoice
   app.post('/api/invoices', async (req, res) => {
-    const { customer_id, invoice_number, date, due_date, notes, gst_enabled, gst_amount, subtotal, total_amount, services, status = 'pending' } = req.body;
+    const { customer_id, invoice_number, date, due_date, notes, gst_enabled, gst_amount, subtotal, total_amount, services, status = 'pending', type = 'invoice' } = req.body;
     
     // basic validation
     if (!customer_id || !invoice_number || !date || typeof total_amount !== 'number' || !services || services.length === 0) {
@@ -420,8 +553,8 @@ async function startServer() {
       try {
         await client.query('BEGIN');
         const invRes = await client.query(
-          'INSERT INTO invoices (customer_id, invoice_number, date, due_date, notes, gst_enabled, gst_amount, subtotal, total_amount, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
-          [customer_id, invoice_number, date, due_date, notes, gst_enabled ? true : false, gst_amount, subtotal, total_amount, status]
+          'INSERT INTO invoices (customer_id, invoice_number, date, due_date, notes, gst_enabled, gst_amount, subtotal, total_amount, status, type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *',
+          [customer_id, invoice_number, date, due_date, notes, gst_enabled ? true : false, gst_amount, subtotal, total_amount, status, type]
         );
         const invoiceId = invRes.rows[0].id;
         
@@ -461,7 +594,8 @@ async function startServer() {
         gst_amount,
         subtotal,
         total_amount,
-        status
+        status,
+        type
       });
       services.forEach((s: any) => {
         memServices.push({

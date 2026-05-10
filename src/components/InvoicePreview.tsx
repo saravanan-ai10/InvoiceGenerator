@@ -21,10 +21,27 @@ interface InvoiceData {
   customer_address: string;
   contact_person: string;
   notes?: string;
+  type?: 'invoice' | 'purchase_order' | 'quotation';
 }
 
 export default function InvoicePreview({ data, previewRef }: { data: InvoiceData; previewRef: React.RefObject<HTMLDivElement> }) {
   const [profile, setProfile] = useState<any>(null);
+
+  const getDocTitle = () => {
+    switch (data.type) {
+      case 'purchase_order': return 'Purchase Order';
+      case 'quotation': return 'Quotation';
+      default: return 'Tax Invoice';
+    }
+  };
+
+  const getDocNumberLabel = () => {
+    switch (data.type) {
+      case 'purchase_order': return 'PO No.';
+      case 'quotation': return 'Quote No.';
+      default: return 'Invoice No.';
+    }
+  };
 
   useEffect(() => {
     fetch('/api/profile')
@@ -34,14 +51,12 @@ export default function InvoicePreview({ data, previewRef }: { data: InvoiceData
   }, []);
 
   return (
-    <div className="bg-white w-[540px] shadow-2xl flex flex-col px-10 py-10 text-[10px] text-slate-700 leading-normal" ref={previewRef}>
+    <div className="bg-white w-[210mm] min-h-[297mm] flex flex-col px-12 py-14 text-sm text-slate-700 leading-normal" ref={previewRef}>
       {/* Invoice Header */}
       <div className="flex justify-between items-start mb-8 border-b-0 pb-0">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 bg-blue-900 rounded-sm flex items-center justify-center font-bold text-white text-sm">
-              {profile?.company_name ? profile.company_name.charAt(0).toUpperCase() : 'S'}
-            </div>
+            <img src="/Untitled_design__1_-removebg-preview.png" alt="Logo" className="h-10 w-auto object-contain" />
             <div className="font-black text-sm tracking-tight text-slate-900">{profile?.company_name || 'Sparksfly O&G Pte Ltd'}</div>
           </div>
           <div className="text-slate-400 space-y-0.5 whitespace-pre-wrap">
@@ -50,9 +65,9 @@ export default function InvoicePreview({ data, previewRef }: { data: InvoiceData
           </div>
         </div>
         <div className="text-right">
-          <h1 className="text-2xl font-black text-blue-900 mb-2 uppercase tracking-tighter">Tax Invoice</h1>
+          <h1 className="text-2xl font-black text-blue-900 mb-2 uppercase tracking-tighter">{getDocTitle()}</h1>
           <div className="grid grid-cols-2 gap-x-4 text-right">
-            <span className="font-bold text-slate-400 uppercase">Invoice No.</span>
+            <span className="font-bold text-slate-400 uppercase">{getDocNumberLabel()}</span>
             <span className="font-mono font-bold text-slate-800">{data.invoice_number || '---'}</span>
             <span className="font-bold text-slate-400 uppercase">Date</span>
             <span className="text-slate-800">{data.date ? new Date(data.date).toLocaleDateString() : '---'}</span>
@@ -118,8 +133,8 @@ export default function InvoicePreview({ data, previewRef }: { data: InvoiceData
             </div>
           )}
           <div className="flex justify-between pt-2 border-t border-slate-900 mt-2">
-            <span className="text-blue-900 font-black text-xs uppercase">Grand Total</span>
-            <span className="text-blue-900 font-black text-xs font-mono underline">SGD {data.total_amount.toFixed(2)}</span>
+            <span className="text-blue-900 font-black text-sm uppercase">Grand Total</span>
+            <span className="text-blue-900 font-black text-sm font-mono underline">SGD {data.total_amount.toFixed(2)}</span>
           </div>
         </div>
       </div>
@@ -129,18 +144,20 @@ export default function InvoicePreview({ data, previewRef }: { data: InvoiceData
         {data.notes && (
           <div className="mb-6">
             <h3 className="font-bold text-slate-900 mb-2 uppercase">Notes:</h3>
-            <p className="whitespace-pre-wrap text-[10px] text-slate-600 border border-slate-200 p-2 rounded">{data.notes}</p>
+            <p className="whitespace-pre-wrap text-sm text-slate-600 border border-slate-200 p-2 rounded">{data.notes}</p>
           </div>
         )}
         <div className="grid grid-cols-2 gap-8">
-          <div>
-            <h3 className="font-bold text-slate-900 mb-2 uppercase">Payment Details:</h3>
-            <div className="text-slate-500 space-y-0.5 border border-slate-200 p-2 rounded">
-              <p><span className="font-bold text-slate-700">Bank:</span> {profile?.bank_name || 'OCBC Bank Singapore'}</p>
-              <p><span className="font-bold text-slate-700">Acc Name:</span> {profile?.bank_account_name || 'Sparksfly O&G Pte Ltd'}</p>
-              <p><span className="font-bold text-slate-700">Acc No:</span> {profile?.bank_account_no || '123-456789-001'}</p>
+          {data.type !== 'purchase_order' ? (
+            <div>
+              <h3 className="font-bold text-slate-900 mb-2 uppercase">Payment Details:</h3>
+              <div className="text-slate-500 space-y-0.5 border border-slate-200 p-2 rounded">
+                <p><span className="font-bold text-slate-700">Bank:</span> {profile?.bank_name || 'OCBC Bank Singapore'}</p>
+                <p><span className="font-bold text-slate-700">Acc Name:</span> {profile?.bank_account_name || 'Sparksfly O&G Pte Ltd'}</p>
+                <p><span className="font-bold text-slate-700">Acc No:</span> {profile?.bank_account_no || '123-456789-001'}</p>
+              </div>
             </div>
-          </div>
+          ) : <div></div>}
           <div className="flex flex-col items-center justify-end">
             <div className="w-32 border-b border-slate-400 mb-1"></div>
             <p className="text-slate-400 uppercase tracking-widest text-[8px] font-bold">Authorized Signature</p>

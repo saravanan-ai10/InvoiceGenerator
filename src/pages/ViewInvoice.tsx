@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, FileText, Download, Mail, Edit, Share2, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, Mail, Edit, Share2, Trash2 } from "lucide-react";
 import InvoicePreview from "../components/InvoicePreview";
+import ResponsivePreview from "../components/ResponsivePreview";
 import { Button } from "../components/ui/button";
 import { toCanvas } from 'html-to-image';
 import jsPDF from 'jspdf';
@@ -15,6 +16,8 @@ export default function ViewInvoice() {
   const [loadingPdf, setLoadingPdf] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     const fetchInvoice = async () => {
@@ -57,14 +60,17 @@ export default function ViewInvoice() {
         pixelRatio: 2
       });
       
-      const imgData = canvas.toDataURL('image/png');
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
       const pdf = new jsPDF({
         orientation: 'portrait',
-        unit: 'px',
-        format: [canvas.width, canvas.height] 
+        unit: 'mm',
+        format: 'a4' 
       });
       
-      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
       pdf.save(`Invoice_${invoice.invoice_number}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -88,13 +94,16 @@ export default function ViewInvoice() {
       if (navigator.share && previewRef.current && navigator.canShare) {
         setLoadingPdf(true); // Re-using loading state
         const canvas = await toCanvas(previewRef.current, { pixelRatio: 2 });
-        const imgData = canvas.toDataURL('image/png');
+        const imgData = canvas.toDataURL('image/jpeg', 1.0);
         const pdf = new jsPDF({
           orientation: 'portrait',
-          unit: 'px',
-          format: [canvas.width, canvas.height] 
+          unit: 'mm',
+          format: 'a4' 
         });
-        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        
+        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
         
         // Generate Blob from PDF
         const pdfBlob = pdf.output('blob');
@@ -136,7 +145,6 @@ export default function ViewInvoice() {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm('Delete this invoice?')) return;
     try {
       const res = await fetch(`/api/invoices/${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -196,7 +204,9 @@ export default function ViewInvoice() {
           </Link>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-slate-400">Invoices /</span>
+              <span className="text-slate-400">
+                {invoice.type === 'purchase_order' ? 'Purchase Orders' : invoice.type === 'quotation' ? 'Quotations' : 'Invoices'} /
+              </span>
               <span className="font-semibold text-slate-800 line-clamp-1">{invoice.invoice_number}</span>
               <select 
                 value={invoice.status || 'pending'} 
@@ -231,20 +241,43 @@ export default function ViewInvoice() {
           <Link to="/create" state={{ editInvoice: invoice }} className="flex-1 sm:flex-none">
             <Button className="w-full gap-2 bg-blue-600 text-white hover:bg-blue-700 shadow-sm">
               <Edit className="w-4 h-4" />
-              <span className="hidden sm:inline">Edit Invoice</span>
+              <span className="hidden sm:inline">
+                {invoice.type === 'purchase_order' ? 'Edit PO' : invoice.type === 'quotation' ? 'Edit Quotation' : 'Edit Invoice'}
+              </span>
             </Button>
           </Link>
-          <Button variant="outline" className="gap-2 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" onClick={handleDelete}>
+          <Button variant="outline" className="gap-2 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" onClick={() => setShowDeleteConfirm(true)}>
             <Trash2 className="w-4 h-4" />
           </Button>
         </div>
       </div>
       
-      <div className="flex-1 overflow-y-auto overflow-x-auto p-4 sm:p-8 flex justify-center lg:justify-center items-start">
-        <div className="shadow-2xl rounded-sm overflow-hidden bg-white shrink-0 origin-top transform scale-[0.6] sm:scale-75 lg:scale-100 transition-transform">
+      <div className="flex-1 max-w-full min-w-0 flex flex-col items-start w-full">
+        <ResponsivePreview>
           <InvoicePreview data={invoice} previewRef={previewRef} />
-        </div>
+        </ResponsivePreview>
       </div>
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-xl shadow-lg max-w-md w-full p-6 space-y-6">
+            <div>
+              <h3 className="text-xl font-bold text-slate-900">Delete Invoice</h3>
+              <p className="text-slate-500 mt-2">
+                Are you sure you want to delete this invoice? This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleDelete} className="bg-red-600 hover:bg-red-700 text-white">
+                Delete Invoice
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Building2, FileText, MapPin, Trash2 } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/card";
+import { Card, CardTitle, CardContent } from "../components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 
 export default function ClientDetails() {
@@ -12,6 +11,8 @@ export default function ClientDetails() {
   const [client, setClient] = useState<any>(null);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -55,12 +56,16 @@ export default function ClientDetails() {
   };
 
   const handleDeleteClient = async () => {
-    if (!window.confirm('Are you sure you want to delete this client? All associated invoices will also be deleted.')) return;
     try {
-      await fetch(`/api/customers/${id}`, { method: 'DELETE' });
+      const resp = await fetch(`/api/customers/${id}`, { method: 'DELETE' });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.error || 'Failed to delete client');
+      }
       navigate('/clients');
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      alert('Error deleting client: ' + e.message);
     }
   };
 
@@ -122,7 +127,7 @@ export default function ClientDetails() {
               <FileText className="w-4 h-4" />
               New Invoice
             </Link>
-            <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" onClick={handleDeleteClient}>
+            <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" onClick={() => setShowDeleteConfirm(true)}>
               <Trash2 className="w-4 h-4 mr-2" />
               Delete Client
             </Button>
@@ -189,6 +194,27 @@ export default function ClientDetails() {
           </CardContent>
         </Card>
       </div>
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-xl shadow-lg max-w-md w-full p-6 space-y-6">
+            <div>
+              <h3 className="text-xl font-bold text-slate-900">Delete Client</h3>
+              <p className="text-slate-500 mt-2">
+                Are you sure you want to delete this client? All associated invoices will also be deleted. This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleDeleteClient} className="bg-red-600 hover:bg-red-700 text-white">
+                Delete Client
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

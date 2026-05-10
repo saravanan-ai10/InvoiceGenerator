@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Users, Building2, MapPin, Search } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/card";
+import { Card, CardTitle, CardContent } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 
 export default function Clients() {
