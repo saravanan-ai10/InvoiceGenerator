@@ -54,6 +54,18 @@ export default function Settings() {
     setProfile({ ...profile, [e.target.name]: e.target.value });
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProfile({ ...profile, signature: reader.result as string });
+        setEditingFields(prev => ({ ...prev, signature: true }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -188,6 +200,29 @@ export default function Settings() {
                   className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   rows={3}
                 />
+              </div>
+
+              <div className="space-y-2 col-span-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-sm font-semibold text-slate-700">Signature Image</label>
+                  {!editingFields['signature'] && (
+                    <button onClick={() => handleEditClick('signature')} className="text-slate-400 hover:text-blue-600 transition-colors p-1" title="Edit Signature">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                {profile?.signature && (
+                  <div className="mb-2">
+                    <img src={profile.signature} alt="Signature" className="max-h-24 max-w-sm object-contain border border-slate-200 rounded p-1 bg-white" />
+                  </div>
+                )}
+                {editingFields['signature'] && (
+                  <Input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={handleFileChange}
+                  />
+                )}
               </div>
             </div>
 

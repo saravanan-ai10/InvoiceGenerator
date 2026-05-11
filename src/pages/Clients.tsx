@@ -1,13 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Users, Building2, MapPin, Search } from "lucide-react";
+import { Users, Building2, MapPin, Search, Plus } from "lucide-react";
 import { Card, CardTitle, CardContent } from "../components/ui/card";
 import { Input } from "../components/ui/input";
+import { Button } from "../components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "../components/ui/dialog";
+import { Label } from "../components/ui/label";
+import { Textarea } from "../components/ui/textarea";
 
 export default function Clients() {
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [newClient, setNewClient] = useState({ name: "", contact_person: "", address: "" });
 
   const fetchClients = async () => {
     try {
@@ -29,6 +35,23 @@ export default function Clients() {
     fetchClients();
   }, []);
 
+  const handleAddClient = async () => {
+    try {
+      const res = await fetch("/api/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newClient),
+      });
+      if (res.ok) {
+        setIsAddDialogOpen(false);
+        setNewClient({ name: "", contact_person: "", address: "" });
+        fetchClients();
+      }
+    } catch (e) {
+      console.error("Failed to add client", e);
+    }
+  };
+
   const filteredClients = clients.filter(c => {
     const term = searchTerm.toLowerCase();
     return (
@@ -45,6 +68,50 @@ export default function Clients() {
             <h2 className="text-3xl font-bold tracking-tight">Clients</h2>
             <p className="text-muted-foreground mt-2">Manage your cleaning service clients.</p>
           </div>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger render={<Button className="bg-blue-600 hover:bg-blue-700" />}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Client
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Add New Client</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="name">Company Name *</Label>
+                  <Input 
+                    id="name" 
+                    value={newClient.name} 
+                    onChange={e => setNewClient({ ...newClient, name: e.target.value })} 
+                    placeholder="e.g. Acme Corp" 
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="contact">Contact Person</Label>
+                  <Input 
+                    id="contact" 
+                    value={newClient.contact_person} 
+                    onChange={e => setNewClient({ ...newClient, contact_person: e.target.value })} 
+                    placeholder="e.g. Jane Doe" 
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="address">Address</Label>
+                  <Textarea 
+                    id="address" 
+                    value={newClient.address} 
+                    onChange={e => setNewClient({ ...newClient, address: e.target.value })} 
+                    placeholder="Client's address" 
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleAddClient} disabled={!newClient.name}>Save Client</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <Card className="shadow-sm border-slate-200">
@@ -73,7 +140,7 @@ export default function Clients() {
                 </div>
                 <p className="text-lg font-medium text-slate-700 mb-1">No clients found</p>
                 <p className="text-sm">
-                  {searchTerm ? 'Try a different search term.' : 'Clients will appear here automatically when you create an invoice for them.'}
+                  {searchTerm ? 'Try a different search term.' : 'Clients will appear here automatically when you add them.'}
                 </p>
               </div>
             ) : (

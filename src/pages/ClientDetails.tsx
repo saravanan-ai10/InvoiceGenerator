@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Building2, FileText, MapPin, Trash2 } from "lucide-react";
+import { ArrowLeft, Building2, FileText, MapPin, Trash2, Pencil } from "lucide-react";
 import { Card, CardTitle, CardContent } from "../components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Button } from "../components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "../components/ui/dialog";
+import { Label } from "../components/ui/label";
+import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
 
 export default function ClientDetails() {
   const { id } = useParams();
@@ -13,13 +17,21 @@ export default function ClientDetails() {
   const [loading, setLoading] = useState(true);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editClientData, setEditClientData] = useState({ name: "", contact_person: "", address: "" });
 
   const fetchData = async () => {
     setLoading(true);
     try {
       const clientRes = await fetch(`/api/customers/${id}`);
       if (clientRes.ok) {
-        setClient(await clientRes.json());
+        const clientData = await clientRes.json();
+        setClient(clientData);
+        setEditClientData({
+          name: clientData.name || "",
+          contact_person: clientData.contact_person || "",
+          address: clientData.address || ""
+        });
       }
 
       const invRes = await fetch(`/api/customers/${id}/invoices`);
@@ -30,6 +42,27 @@ export default function ClientDetails() {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEditClient = async () => {
+    try {
+      const res = await fetch(`/api/customers/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editClientData)
+      });
+      if (res.ok) {
+        const updatedClient = await res.json();
+        setClient(updatedClient);
+        setIsEditDialogOpen(false);
+      } else {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to update client");
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert('Error updating client: ' + e.message);
     }
   };
 
@@ -127,6 +160,52 @@ export default function ClientDetails() {
               <FileText className="w-4 h-4" />
               New Invoice
             </Link>
+            
+            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+              <DialogTrigger render={<Button variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700" />}>
+                <Pencil className="w-4 h-4 mr-2" />
+                Edit Client
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Edit Client</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-name">Company Name *</Label>
+                    <Input 
+                      id="edit-name" 
+                      value={editClientData.name} 
+                      onChange={e => setEditClientData({ ...editClientData, name: e.target.value })} 
+                      placeholder="e.g. Acme Corp" 
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-contact">Contact Person</Label>
+                    <Input 
+                      id="edit-contact" 
+                      value={editClientData.contact_person} 
+                      onChange={e => setEditClientData({ ...editClientData, contact_person: e.target.value })} 
+                      placeholder="e.g. Jane Doe" 
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="edit-address">Address</Label>
+                    <Textarea 
+                      id="edit-address" 
+                      value={editClientData.address} 
+                      onChange={e => setEditClientData({ ...editClientData, address: e.target.value })} 
+                      placeholder="Client's address" 
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
+                  <Button onClick={handleEditClient} disabled={!editClientData.name}>Save Changes</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
             <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700" onClick={() => setShowDeleteConfirm(true)}>
               <Trash2 className="w-4 h-4 mr-2" />
               Delete Client

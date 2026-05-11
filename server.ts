@@ -93,7 +93,8 @@ if (process.env.DATABASE_URL) {
           bank_name VARCHAR(255),
           bank_account_name VARCHAR(255),
           bank_account_no VARCHAR(255),
-          gst_percentage NUMERIC(5, 2) DEFAULT 9.0
+          gst_percentage NUMERIC(5, 2) DEFAULT 9.0,
+          signature TEXT
         );
         CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
@@ -103,6 +104,7 @@ if (process.env.DATABASE_URL) {
           reset_token_expires TIMESTAMP
         );
         ALTER TABLE profile ADD COLUMN IF NOT EXISTS gst_percentage NUMERIC(5, 2) DEFAULT 9.0;
+        ALTER TABLE profile ADD COLUMN IF NOT EXISTS signature TEXT;
         INSERT INTO profile (id, company_name, address, phone, email, bank_name, bank_account_name, bank_account_no) 
         SELECT 1, 'Sparksfly O&G Pte Ltd', '123 Industrial Park Rd, #04-56\nSingapore 678901', '+65 6123 4567', 'contact@sparksfly.sg', 'OCBC Bank Singapore', 'Sparksfly O&G Pte Ltd', '123-456789-001'
         WHERE NOT EXISTS (SELECT 1 FROM profile WHERE id = 1);
@@ -124,7 +126,7 @@ if (process.env.DATABASE_URL) {
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
   app.use(express.json());
 
@@ -246,19 +248,19 @@ async function startServer() {
 
   // Update Profile
   app.put('/api/profile', async (req, res) => {
-    const { company_name, address, phone, email, bank_name, bank_account_name, bank_account_no, gst_percentage } = req.body;
+    const { company_name, address, phone, email, bank_name, bank_account_name, bank_account_no, gst_percentage, signature } = req.body;
     if (pool) {
       try {
         const result = await pool.query(
-          `UPDATE profile SET company_name=$1, address=$2, phone=$3, email=$4, bank_name=$5, bank_account_name=$6, bank_account_no=$7, gst_percentage=$8 WHERE id=1 RETURNING *`,
-          [company_name, address, phone, email, bank_name, bank_account_name, bank_account_no, gst_percentage]
+          `UPDATE profile SET company_name=$1, address=$2, phone=$3, email=$4, bank_name=$5, bank_account_name=$6, bank_account_no=$7, gst_percentage=$8, signature=$9 WHERE id=1 RETURNING *`,
+          [company_name, address, phone, email, bank_name, bank_account_name, bank_account_no, gst_percentage, signature]
         );
         res.json(result.rows[0]);
       } catch (err: any) {
         res.status(500).json({ error: err.message });
       }
     } else {
-      memProfile = { ...memProfile, company_name, address, phone, email, bank_name, bank_account_name, bank_account_no, gst_percentage };
+      memProfile = { ...memProfile, company_name, address, phone, email, bank_name, bank_account_name, bank_account_no, gst_percentage, signature };
       res.json(memProfile);
     }
   });
