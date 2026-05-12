@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
-import { Building2, Save, Pencil } from "lucide-react";
+import { Building2, Save, Pencil, Lock } from "lucide-react";
 
 export default function Settings() {
   const [profile, setProfile] = useState<any>(null);
@@ -11,6 +11,44 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [editingFields, setEditingFields] = useState<Record<string, boolean>>({});
   const [pendingEditField, setPendingEditField] = useState<string | null>(null);
+
+  const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [passwordStatus, setPasswordStatus] = useState({ loading: false, message: '', error: false });
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordStatus({ loading: true, message: '', error: false });
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setPasswordStatus({ loading: false, message: 'New passwords do not match', error: true });
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          currentPassword: passwordData.currentPassword,
+          newPassword: passwordData.newPassword
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setPasswordStatus({ loading: false, message: 'Password changed successfully', error: false });
+        setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      } else {
+        setPasswordStatus({ loading: false, message: data.error || 'Failed to change password', error: true });
+      }
+    } catch (err: any) {
+      setPasswordStatus({ loading: false, message: err.message, error: true });
+    }
+  };
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -315,6 +353,56 @@ export default function Settings() {
                 </>
               )}
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-slate-200 mt-8">
+          <CardHeader className="bg-slate-50/50 border-b border-slate-100 rounded-t-xl">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Lock className="w-5 h-5 text-slate-400" />
+              Security
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <form onSubmit={handlePasswordChange} className="space-y-4 max-w-md">
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">Current Password</label>
+                <Input 
+                  type="password" 
+                  value={passwordData.currentPassword} 
+                  onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })} 
+                  required 
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">New Password</label>
+                <Input 
+                  type="password" 
+                  value={passwordData.newPassword} 
+                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })} 
+                  required 
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">Confirm New Password</label>
+                <Input 
+                  type="password" 
+                  value={passwordData.confirmPassword} 
+                  onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })} 
+                  required 
+                />
+              </div>
+
+              {passwordStatus.message && (
+                <div className={`p-3 text-sm rounded ${passwordStatus.error ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
+                  {passwordStatus.message}
+                </div>
+              )}
+
+              <Button type="submit" disabled={passwordStatus.loading} className="bg-slate-900 text-white hover:bg-slate-800">
+                {passwordStatus.loading ? "Updating..." : "Change Password"}
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </div>

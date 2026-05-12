@@ -220,6 +220,43 @@ async function startServer() {
     res.json({ success: true, message: 'Password reset successfully' });
   });
 
+  app.post('/api/auth/change-password', async (req, res) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'No token' });
+    let userId;
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      userId = decoded.userId;
+    } catch {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Current and new password required' });
+
+    let user;
+    if (pool) {
+      const result = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+      user = result.rows[0];
+    } else {
+      user = memUsers.find(u => u.id === userId);
+    }
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const isValid = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isValid) return res.status(401).json({ error: 'Invalid current password' });
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    
+    if (pool) {
+      await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
+    } else {
+      const userIdx = memUsers.findIndex(u => u.id === userId);
+      memUsers[userIdx].password_hash = passwordHash;
+    }
+    res.json({ success: true, message: 'Password changed successfully' });
+  });
+
   app.get('/api/auth/me', (req, res) => {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'No token' });
