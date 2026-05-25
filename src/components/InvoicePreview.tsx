@@ -96,7 +96,9 @@ export default function InvoicePreview({ data, previewRef }: { data: InvoiceData
 
       {/* Billing Details */}
       <div className="mb-8 p-4 bg-slate-50 border-l-4 border-blue-900 shrink-0">
-        <h2 className="font-bold text-blue-900 mb-1 uppercase tracking-wider">Bill To:</h2>
+        <h2 className="font-bold text-blue-900 mb-1 uppercase tracking-wider">
+          {data.type === 'quotation' ? 'To:' : 'Bill To:'}
+        </h2>
         <p className="font-bold text-sm text-black">{data.customer_name || 'Client Name'}</p>
         {data.customer_address && <p className="whitespace-pre-wrap text-black">{data.customer_address}</p>}
         {data.contact_person && <p className="mt-2"><span className="font-bold">ATTN:</span> {data.contact_person}</p>}

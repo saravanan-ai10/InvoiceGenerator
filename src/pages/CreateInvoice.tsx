@@ -51,8 +51,7 @@ export default function CreateInvoice() {
   const [invoicePrefix, setInvoicePrefix] = useState(getPrefix(editInvoice?.type || 'invoice', editInvoice?.invoice_number));
   const [invoiceSuffix, setInvoiceSuffix] = useState(getSuffix(editInvoice?.invoice_number));
 
-  const quotationDefaultNotes = `Terms & Condition
-1.Sparksfly will Provide workers with Safety Shoe & Pant.
+  const quotationDefaultNotes = `1.Sparksfly will Provide workers with Safety Shoe & Pant.
 2.Sparksfly will provide 30 days notice before terminating the contract.
 3.Sparksfly will invoice  every month two times (first half &2nd half) with a week Payment term.
 4.Should give 30 days notice before terminating the contract.
