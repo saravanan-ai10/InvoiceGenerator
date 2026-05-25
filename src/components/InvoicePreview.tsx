@@ -103,7 +103,7 @@ export default function InvoicePreview({ data, previewRef }: { data: InvoiceData
       </div>
 
       {/* Service Table */}
-      <div className="flex-1 min-h-[300px]">
+      <div className="w-full">
         <table className="w-full border-collapse">
           <thead>
             <tr className="bg-[#462C7D] text-white">
@@ -156,16 +156,21 @@ export default function InvoicePreview({ data, previewRef }: { data: InvoiceData
         </div>
       </div>
 
+      {/* Spacer to push footer to bottom */}
+      <div className="flex-1 min-h-[32px]"></div>
+
       {/* Payment Info & Footer */}
-      <div className="mt-8 pt-6 pb-6 shrink-0">
+      <div className="pt-6 pb-6 shrink-0">
         {data.notes && (
           <div className="mb-6">
-            <h3 className="font-bold text-black mb-2 uppercase">Notes:</h3>
+            <h3 className="font-bold text-black mb-2 uppercase">
+              {data.type === 'quotation' ? 'Terms & Conditions:' : 'Notes:'}
+            </h3>
             <p className="whitespace-pre-wrap text-sm text-black border border-slate-200 p-2 rounded">{data.notes}</p>
           </div>
         )}
         <div className="grid grid-cols-2 gap-8">
-          {data.type !== 'purchase_order' ? (
+          {data.type === 'invoice' ? (
             <div>
               <h3 className="font-bold text-[#462C7D] mb-2 uppercase">Payment Details:</h3>
               <div className="bg-[#462C7D] text-white space-y-0.5 p-3 rounded shadow-sm">
@@ -175,18 +180,46 @@ export default function InvoicePreview({ data, previewRef }: { data: InvoiceData
               </div>
             </div>
           ) : <div></div>}
-          <div className="flex flex-col items-center justify-end">
-            {profile?.signature ? (
-               <div className="h-16 flex items-end justify-center mb-1">
-                 <img src={profile.signature} alt="Signature" className="max-h-full max-w-32 object-contain" />
-               </div>
-            ) : null}
-            <div className="w-32 border-b border-black mb-1"></div>
-            <p className="text-black uppercase tracking-widest text-[8px] font-bold">Authorized Signature</p>
-          </div>
+          
+          {data.type !== 'quotation' ? (
+            <div className="flex flex-col items-center justify-end">
+              {profile?.signature ? (
+                <div className="h-16 flex items-end justify-center mb-1">
+                  <img src={profile.signature} alt="Signature" className="max-h-full max-w-32 object-contain" />
+                </div>
+              ) : null}
+              <div className="w-32 border-b border-black mb-1"></div>
+              <p className="text-black uppercase tracking-widest text-[8px] font-bold">Authorized Signature</p>
+            </div>
+          ) : <div></div>}
         </div>
+
+        {data.type === 'quotation' && (
+          <div className="grid grid-cols-2 gap-8 mt-12">
+            <div className="flex flex-col items-start justify-end">
+              <p className="text-black text-xs font-bold mb-8">Sincerely,</p>
+              {profile?.signature ? (
+                <div className="h-16 flex items-end justify-start mb-1">
+                  <img src={profile.signature} alt="Signature" className="max-h-full max-w-32 object-contain" />
+                </div>
+              ) : <div className="h-16"></div>}
+              <div className="w-[80%] border-b border-black mb-1"></div>
+              <p className="text-black uppercase tracking-widest text-[8px] font-bold">{profile?.company_name || 'Sparksfly O&G Pte Ltd'}</p>
+            </div>
+
+            <div className="flex flex-col items-start justify-end">
+              <p className="text-black text-xs font-bold mb-8">Confirmed and Accepted By</p>
+              <div className="h-16 flex items-end justify-start mb-1"></div>
+              <div className="w-[80%] border-b border-black mb-1"></div>
+              <p className="text-black uppercase tracking-widest text-[8px] font-bold">Authorized Signature</p>
+            </div>
+          </div>
+        )}
+
         <div className="mt-6 text-center text-black border-t border-slate-200 pt-2 italic text-[9px]">
-          Please include the invoice number in your transfer. Thank you for your business.
+          {data.type === 'quotation' 
+            ? 'Thank you for your business.' 
+            : 'Please include the invoice number in your transfer. Thank you for your business.'}
         </div>
       </div>
     </div>

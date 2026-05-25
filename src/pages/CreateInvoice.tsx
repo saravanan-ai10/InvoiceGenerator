@@ -51,9 +51,21 @@ export default function CreateInvoice() {
   const [invoicePrefix, setInvoicePrefix] = useState(getPrefix(editInvoice?.type || 'invoice', editInvoice?.invoice_number));
   const [invoiceSuffix, setInvoiceSuffix] = useState(getSuffix(editInvoice?.invoice_number));
 
+  const quotationDefaultNotes = `Terms & Condition
+1.Sparksfly will Provide workers with Safety Shoe & Pant.
+2.Sparksfly will provide 30 days notice before terminating the contract.
+3.Sparksfly will invoice  every month two times (first half &2nd half) with a week Payment term.
+4.Should give 30 days notice before terminating the contract.
+
+Should the terms and Conditions are acceptable,    Pls sign  and stamp the space provided here to indicate your  acceptance.`;
+
   useEffect(() => {
     if (!editInvoice) {
       setInvoicePrefix(getPrefix(docType));
+      setFormData(prev => ({
+        ...prev,
+        notes: docType === 'quotation' && !prev.notes ? quotationDefaultNotes : (docType !== 'quotation' && prev.notes === quotationDefaultNotes ? '' : prev.notes)
+      }));
     }
   }, [docType]);
 
@@ -66,7 +78,7 @@ export default function CreateInvoice() {
     customer_name: editInvoice?.customer_name || editInvoice?.name || prefilledClient?.name || "",
     customer_address: editInvoice?.customer_address || editInvoice?.address || prefilledClient?.address || "",
     contact_person: editInvoice?.contact_person || prefilledClient?.contact_person || "",
-    notes: editInvoice?.notes || "",
+    notes: editInvoice?.notes || (editInvoice?.type === 'quotation' || docType === 'quotation' ? quotationDefaultNotes : ""),
     gst_enabled: editInvoice?.gst_enabled || false,
     services: editInvoice?.services && editInvoice.services.length > 0 ? editInvoice.services.map((s: any) => ({
       ...s,
